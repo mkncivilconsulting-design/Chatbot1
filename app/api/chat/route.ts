@@ -5,8 +5,11 @@ import { systemInstruction } from "@/lib/qna";
 // Dùng `||` chứ không phải `??`: GEMINI_MODEL= (rỗng) trong .env phải rơi về mặc định.
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
-// Số tin nhắn gần nhất gửi kèm để giữ mạch hội thoại, tránh prompt phình vô hạn.
-const MAX_HISTORY = 20;
+// Mỗi lượt hỏi đều gửi lại TOÀN BỘ lịch sử (model không tự nhớ giữa các request),
+// nên cần một trần để prompt không phình vô hạn nếu ai đó chat hàng trăm câu.
+// 60 tin ≈ 30 lượt hỏi đáp — dư cho một phiên tư vấn bình thường.
+// Lịch sử chỉ nằm trong state của React: tải lại trang là mất, đúng như thiết kế.
+const MAX_HISTORY = 60;
 
 interface IncomingMessage {
   from: "bot" | "user";
