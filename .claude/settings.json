@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/check-claude-md-drift.sh\" 2>/dev/null || true",
+            "timeout": 10,
+            "statusMessage": "Checking CLAUDE.md freshness"
+          }
+        ]
+      }
+    ]
+  }
+}
