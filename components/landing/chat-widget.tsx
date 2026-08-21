@@ -11,35 +11,55 @@ interface Message {
   text: string;
 }
 
-const initialMessages: Message[] = [{ from: "bot", text: chatGreeting }];
-
 export function ChatWidget() {
   const [open, setOpen] = React.useState(false);
-  const [messages, setMessages] = React.useState<Message[]>(initialMessages);
+  const [messages, setMessages] = React.useState<Message[]>([]);
   const [input, setInput] = React.useState("");
   const [pending, setPending] = React.useState(false);
+  const [restoring, setRestoring] = React.useState(true);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
-  // Luôn cuộn xuống tin nhắn mới nhất.
+  // Lịch sử nằm trong database, không nằm trong trình duyệt. Khung chat hỏi server
+  // qua GET /api/chat; server nhận diện hội thoại bằng cookie httpOnly mà chính nó
+  // đã đặt, nên JavaScript ở đây không hề biết id hội thoại là gì.
+  React.useEffect(() => {
+    let huy = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/chat");
+        const data = await res.json().catch(() => null);
+        if (!huy && res.ok && Array.isArray(data?.messages)) {
+          setMessages(data.messages);
+        }
+      } catch {
+        // Không tải được lịch sử thì vẫn cho chat tiếp từ đầu.
+      } finally {
+        if (!huy) setRestoring(false);
+      }
+    })();
+    return () => {
+      huy = true;
+    };
+  }, []);
+
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, pending]);
+  }, [messages, pending, open]);
 
   async function sendMessage(text: string) {
     const question = text.trim();
     if (!question || pending) return;
 
-    // Gửi kèm lịch sử để model giữ được mạch hội thoại trong phiên làm việc.
-    const history = [...messages, { from: "user" as const, text: question }];
-    setMessages(history);
+    setMessages((prev) => [...prev, { from: "user", text: question }]);
     setInput("");
     setPending(true);
 
     try {
+      // Chỉ gửi câu hỏi mới. Lịch sử do server tự đọc từ database.
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ message: question }),
       });
       const data = await res.json().catch(() => null);
       const reply =
@@ -56,6 +76,10 @@ export function ChatWidget() {
       setPending(false);
     }
   }
+
+  // Lời chào chỉ để hiển thị, cố ý KHÔNG lưu vào database — nó không phải nội dung
+  // khách nói, và lưu vào chỉ làm bẩn lịch sử hội thoại.
+  const bubbles: Message[] = [{ from: "bot", text: chatGreeting }, ...messages];
 
   return (
     <div className="fixed bottom-5 right-5 z-50">
@@ -76,7 +100,11 @@ export function ChatWidget() {
           </div>
 
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.map((m, i) => (
+            {restoring && (
+              <p className="text-center text-xs text-muted-foreground">Đang tải hội thoại…</p>
+            )}
+
+            {bubbles.map((m, i) => (
               <div
                 key={i}
                 className={cn("flex", m.from === "user" ? "justify-end" : "justify-start")}
@@ -133,6 +161,7 @@ export function ChatWidget() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Nhập câu hỏi của bạn..."
+                maxLength={2000}
                 className="h-9 flex-1 rounded-full border border-input bg-transparent px-3.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               />
               <Button

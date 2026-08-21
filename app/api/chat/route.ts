@@ -1,31 +1,67 @@
+import { cookies } from "next/headers";
 import { systemInstruction } from "@/lib/qna";
+import {
+  appendMessages,
+  conversationExists,
+  createConversation,
+  isValidConversationId,
+  loadMessages,
+  type StoredMessage,
+} from "@/lib/conversations";
+import { isSupabaseConfigured } from "@/lib/supabase-server";
 
-// Model và key đọc từ biến môi trường (file .env). GEMINI_API_KEY chỉ tồn tại
-// phía server — không đặt tiền tố NEXT_PUBLIC_, nếu không key sẽ lộ ra trình duyệt.
 // Dùng `||` chứ không phải `??`: GEMINI_MODEL= (rỗng) trong .env phải rơi về mặc định.
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
-// Mỗi lượt hỏi đều gửi lại TOÀN BỘ lịch sử (model không tự nhớ giữa các request),
-// nên cần một trần để prompt không phình vô hạn nếu ai đó chat hàng trăm câu.
-// 60 tin ≈ 30 lượt hỏi đáp — dư cho một phiên tư vấn bình thường.
-// Lịch sử chỉ nằm trong state của React: tải lại trang là mất, đúng như thiết kế.
+// Số tin nhắn gần nhất gửi kèm cho model. Lịch sử đầy đủ vẫn nằm trong database,
+// đây chỉ là trần cho prompt để không phình vô hạn với hội thoại rất dài.
 const MAX_HISTORY = 60;
 
-interface IncomingMessage {
-  from: "bot" | "user";
-  text: string;
+const MAX_MESSAGE_LENGTH = 2000;
+
+// Cookie chỉ chứa id hội thoại (UUID) — không chứa nội dung, không chứa khoá.
+// httpOnly: JavaScript trong trình duyệt KHÔNG đọc được giá trị này.
+const COOKIE_NAME = "duhoc24_cid";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 ngày
+
+async function readConversationId(): Promise<string | null> {
+  const store = await cookies();
+  const raw = store.get(COOKIE_NAME)?.value;
+  return isValidConversationId(raw) ? raw : null;
 }
 
-function isValidMessage(m: unknown): m is IncomingMessage {
-  if (typeof m !== "object" || m === null) return false;
-  const { from, text } = m as Record<string, unknown>;
-  return (from === "bot" || from === "user") && typeof text === "string";
+async function writeConversationCookie(id: string) {
+  const store = await cookies();
+  store.set(COOKIE_NAME, id, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: COOKIE_MAX_AGE,
+  });
+}
+
+/** Lấy lịch sử hội thoại hiện tại để khung chat dựng lại khi tải trang. */
+export async function GET() {
+  const id = await readConversationId();
+  if (!id) return Response.json({ messages: [] });
+
+  const messages = await loadMessages(id);
+  return Response.json({ messages });
 }
 
 export async function POST(request: Request) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("[api/chat] Thiếu GEMINI_API_KEY trong .env");
+    return Response.json(
+      { error: "Chatbot chưa được cấu hình. Vui lòng liên hệ quản trị viên." },
+      { status: 500 },
+    );
+  }
+
+  if (!isSupabaseConfigured()) {
+    console.error("[api/chat] Thiếu SUPABASE_URL hoặc SUPABASE_SECRET_KEY trong .env");
     return Response.json(
       { error: "Chatbot chưa được cấu hình. Vui lòng liên hệ quản trị viên." },
       { status: 500 },
@@ -39,23 +75,44 @@ export async function POST(request: Request) {
     return Response.json({ error: "Dữ liệu gửi lên không hợp lệ." }, { status: 400 });
   }
 
-  const rawMessages = (body as { messages?: unknown })?.messages;
-  if (!Array.isArray(rawMessages) || !rawMessages.every(isValidMessage)) {
-    return Response.json({ error: "Dữ liệu gửi lên không hợp lệ." }, { status: 400 });
-  }
-
-  const messages = rawMessages.slice(-MAX_HISTORY);
-
-  // Gemini yêu cầu lượt đầu tiên phải là "user", nên bỏ lời chào mở đầu của bot.
-  const firstUser = messages.findIndex((m) => m.from === "user");
-  if (firstUser === -1) {
+  const raw = (body as { message?: unknown })?.message;
+  const question = typeof raw === "string" ? raw.trim() : "";
+  if (!question) {
     return Response.json({ error: "Chưa có câu hỏi nào." }, { status: 400 });
   }
+  if (question.length > MAX_MESSAGE_LENGTH) {
+    return Response.json({ error: "Câu hỏi quá dài, bạn rút gọn giúp mình nhé." }, { status: 400 });
+  }
 
-  const contents = messages.slice(firstUser).map((m) => ({
-    role: m.from === "user" ? "user" : "model",
-    parts: [{ text: m.text }],
-  }));
+  // Cookie có thể trỏ tới hội thoại đã bị xoá — khi đó tạo hội thoại mới.
+  let conversationId = await readConversationId();
+  if (conversationId && !(await conversationExists(conversationId))) {
+    conversationId = null;
+  }
+  if (!conversationId) {
+    conversationId = await createConversation();
+    if (!conversationId) {
+      return Response.json(
+        { error: "Không lưu được hội thoại. Bạn thử lại giúp mình nhé." },
+        { status: 502 },
+      );
+    }
+    await writeConversationCookie(conversationId);
+  }
+
+  // Lịch sử lấy từ DATABASE, không lấy từ dữ liệu client gửi lên.
+  // Nhờ vậy khách không thể bịa lượt trả lời của bot để dụ model nhắc lại.
+  const history = await loadMessages(conversationId);
+
+  const contents = [...history, { from: "user" as const, text: question }]
+    .slice(-MAX_HISTORY)
+    .map((m) => ({
+      role: m.from === "user" ? "user" : "model",
+      parts: [{ text: m.text }],
+    }));
+
+  // Gemini yêu cầu lượt đầu tiên phải là "user".
+  while (contents.length > 0 && contents[0].role !== "user") contents.shift();
 
   let upstream: Response;
   try {
@@ -63,10 +120,7 @@ export async function POST(request: Request) {
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
       {
         method: "POST",
-        headers: {
-          "x-goog-api-key": apiKey,
-          "Content-Type": "application/json",
-        },
+        headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemInstruction }] },
           contents,
@@ -85,7 +139,6 @@ export async function POST(request: Request) {
   const data = await upstream.json().catch(() => null);
 
   if (!upstream.ok) {
-    // Log chi tiết ở server, trả về thông báo chung cho khách để không lộ cấu hình.
     console.error("[api/chat] Gemini trả lỗi:", upstream.status, data?.error?.message);
     return Response.json(
       { error: "Trợ lý đang bận. Bạn thử lại sau ít phút nhé." },
@@ -104,6 +157,16 @@ export async function POST(request: Request) {
       { error: "Trợ lý chưa trả lời được câu này. Bạn thử hỏi lại giúp mình nhé." },
       { status: 502 },
     );
+  }
+
+  // Chỉ lưu khi đã có câu trả lời, để database không đọng câu hỏi mồ côi.
+  const toStore: StoredMessage[] = [
+    { from: "user", text: question },
+    { from: "bot", text: reply },
+  ];
+  const saved = await appendMessages(conversationId, toStore);
+  if (!saved) {
+    console.error("[api/chat] Trả lời được nhưng KHÔNG lưu được vào database");
   }
 
   return Response.json({ reply });

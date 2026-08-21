@@ -8,14 +8,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { conversations } from "@/lib/mock-data";
+import { listConversations } from "@/lib/conversations";
+import { isSupabaseConfigured } from "@/lib/supabase-server";
 
-export default function AdminConversationsPage() {
+// Đây là Server Component: truy vấn chạy trên server bằng secret key, dữ liệu đã
+// render sẵn thành HTML mới gửi xuống. Trình duyệt không hề gọi Supabase.
+// Có `cookies()`/dữ liệu động phía dưới nên trang luôn render theo từng request.
+export const dynamic = "force-dynamic";
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default async function AdminConversationsPage() {
+  const configured = isSupabaseConfigured();
+  const conversations = configured ? await listConversations() : [];
+
   return (
     <>
       <AdminPageHeader
         title="Hội thoại"
-        description="Lịch sử hội thoại của khách với chatbot hỏi đáp trên trang chủ."
+        description="Lịch sử hội thoại của khách với chatbot hỏi đáp trên trang chủ, đọc trực tiếp từ database."
       />
 
       <Card>
@@ -24,7 +43,8 @@ export default function AdminConversationsPage() {
             <TableRow>
               <TableHead>Kênh</TableHead>
               <TableHead>Số tin nhắn</TableHead>
-              <TableHead>Thời gian bắt đầu</TableHead>
+              <TableHead>Bắt đầu</TableHead>
+              <TableHead>Hoạt động gần nhất</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -32,9 +52,24 @@ export default function AdminConversationsPage() {
               <TableRow key={conv.id}>
                 <TableCell className="font-medium">{conv.channel}</TableCell>
                 <TableCell>{conv.messageCount} tin nhắn</TableCell>
-                <TableCell className="text-muted-foreground">{conv.startedAt}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatTime(conv.startedAt)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatTime(conv.lastMessageAt)}
+                </TableCell>
               </TableRow>
             ))}
+
+            {conversations.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
+                  {configured
+                    ? "Chưa có hội thoại nào."
+                    : "Chưa cấu hình SUPABASE_URL và SUPABASE_SECRET_KEY trong .env."}
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </Card>
