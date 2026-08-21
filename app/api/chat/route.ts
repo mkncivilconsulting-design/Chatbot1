@@ -9,6 +9,7 @@ import {
   type StoredMessage,
 } from "@/lib/conversations";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
+import { chiThiNgonNguTheoLichSu } from "@/lib/detect-language";
 
 // Dùng `||` chứ không phải `??`: GEMINI_MODEL= (rỗng) trong .env phải rơi về mặc định.
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
@@ -114,6 +115,12 @@ export async function POST(request: Request) {
   // Gemini yêu cầu lượt đầu tiên phải là "user".
   while (contents.length > 0 && contents[0].role !== "user") contents.shift();
 
+  // Prompt và dữ liệu đều bằng tiếng Việt nên model có xu hướng luôn trả lời
+  // tiếng Việt kể cả khi khách viết tiếng Anh. Xác định ngôn ngữ ở phía server
+  // rồi chèn chỉ thị dứt khoát — cách này chắc chắn hơn là chỉ dặn trong prompt.
+  const cauHoiKhach = [...history.filter((m) => m.from === "user").map((m) => m.text), question];
+  const promptCuoi = systemInstruction + chiThiNgonNguTheoLichSu(cauHoiKhach);
+
   let upstream: Response;
   try {
     upstream = await fetch(
@@ -122,7 +129,7 @@ export async function POST(request: Request) {
         method: "POST",
         headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
+          systemInstruction: { parts: [{ text: promptCuoi }] },
           contents,
           generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
         }),
