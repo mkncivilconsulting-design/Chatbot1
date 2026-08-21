@@ -60,6 +60,50 @@ export const schools: School[] = [
     minGpa: 8.5,
     minIelts: 7.0,
   },
+
+  // ⚠️ CHƯA KIỂM CHỨNG — phải thay bằng số thật trước khi chạy với khách.
+  // 5 trường Úc dưới đây được thêm theo yêu cầu, nhưng minGpa/minIelts là số TẠM.
+  // Lý do: mỗi trường có yêu cầu khác nhau theo từng ngành và bậc học, còn minGpa
+  // theo thang 10 của Việt Nam là con số quy đổi nội bộ của trung tâm, các trường
+  // không công bố. Chatbot đọc thẳng những số này cho khách, và cổng hồ sơ dùng
+  // chúng để phán "đủ / chưa đủ điều kiện" — nên sai số ở đây là tư vấn sai.
+  // Thêm trường mới thì thêm vào CUỐI mảng: currentStudent.matches đang trỏ tới
+  // schools[0] và schools[4] theo index.
+  {
+    id: "sch_06",
+    name: "University of Sydney",
+    country: "Úc",
+    minGpa: 8.0,
+    minIelts: 6.5,
+  },
+  {
+    id: "sch_07",
+    name: "University of Technology Sydney (UTS)",
+    country: "Úc",
+    minGpa: 7.0,
+    minIelts: 6.5,
+  },
+  {
+    id: "sch_08",
+    name: "University of Wollongong",
+    country: "Úc",
+    minGpa: 6.5,
+    minIelts: 6.0,
+  },
+  {
+    id: "sch_09",
+    name: "Monash University",
+    country: "Úc",
+    minGpa: 7.5,
+    minIelts: 6.5,
+  },
+  {
+    id: "sch_10",
+    name: "Australian National University",
+    country: "Úc",
+    minGpa: 8.0,
+    minIelts: 6.5,
+  },
 ];
 
 export interface ServiceOption {
@@ -172,7 +216,7 @@ export const studentProfiles: StudentProfile[] = [
     submittedAt: "2026-08-01",
     docs: { transcript: "hop_le", ielts: "dang_xu_ly", identity: "can_nop_lai" },
     matchedSchools: 2,
-    totalSchools: 5,
+    totalSchools: schools.length,
   },
   {
     id: "stu_502",
@@ -181,7 +225,7 @@ export const studentProfiles: StudentProfile[] = [
     submittedAt: "2026-07-30",
     docs: { transcript: "hop_le", ielts: "hop_le", identity: "hop_le" },
     matchedSchools: 3,
-    totalSchools: 5,
+    totalSchools: schools.length,
   },
   {
     id: "stu_503",
@@ -190,7 +234,7 @@ export const studentProfiles: StudentProfile[] = [
     submittedAt: "2026-08-02",
     docs: { transcript: "hop_le", ielts: "hop_le", identity: "dang_xu_ly" },
     matchedSchools: 1,
-    totalSchools: 5,
+    totalSchools: schools.length,
   },
   {
     id: "stu_504",
@@ -199,7 +243,7 @@ export const studentProfiles: StudentProfile[] = [
     submittedAt: "2026-08-04",
     docs: { transcript: "can_nop_lai", ielts: "hop_le", identity: "hop_le" },
     matchedSchools: 0,
-    totalSchools: 5,
+    totalSchools: schools.length,
   },
   {
     id: "stu_505",
@@ -208,7 +252,7 @@ export const studentProfiles: StudentProfile[] = [
     submittedAt: "2026-08-05",
     docs: { transcript: "dang_xu_ly", ielts: "dang_xu_ly", identity: "dang_xu_ly" },
     matchedSchools: 0,
-    totalSchools: 5,
+    totalSchools: schools.length,
   },
 ];
 

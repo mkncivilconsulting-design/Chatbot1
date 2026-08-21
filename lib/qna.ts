@@ -17,9 +17,13 @@ function truongTheoNuoc(nuoc: string) {
   const list = schools.filter((s) => s.country === nuoc);
   if (list.length === 0) return "hiện chưa có trường tham chiếu nào trong hệ thống";
   // toFixed(1) để 7.0 không bị hiện thành "7" — ngưỡng điểm nên giữ một chữ số thập phân.
-  return list
-    .map((s) => `${s.name} (cần GPA từ ${s.minGpa.toFixed(1)}, IELTS từ ${s.minIelts.toFixed(1)})`)
-    .join("; ");
+  const dong = list.map(
+    (s) => `${s.name} (cần GPA từ ${s.minGpa.toFixed(1)}, IELTS từ ${s.minIelts.toFixed(1)})`,
+  );
+  // Một trường thì viết gọn trong câu; nhiều trường thì xuống dòng cho dễ đọc.
+  // Trả về kèm sẵn khoảng trắng / xuống dòng ở đầu để ghép ngay sau dấu ":".
+  if (dong.length === 1) return " " + dong[0];
+  return "\n" + dong.map((d) => `- ${d}`).join("\n");
 }
 
 export const qnaPairs: QnaPair[] = [
@@ -115,15 +119,21 @@ export const qnaPairs: QnaPair[] = [
   },
   {
     question: "Em muốn du học Úc thì bên mình tư vấn được không?",
-    answer: `Được bạn nhé. Trường tham chiếu của Úc trong hệ thống: ${truongTheoNuoc("Úc")}. Bạn nộp hồ sơ trong cổng hồ sơ, hệ thống sẽ đối chiếu điểm học tập và IELTS của bạn với điểm chuẩn rồi báo ngay bạn có đủ điều kiện không.`,
+    answer: `Được bạn nhé. Các trường tham chiếu của Úc trong hệ thống:${truongTheoNuoc("Úc")}
+
+Bạn nộp hồ sơ trong cổng hồ sơ, hệ thống sẽ đối chiếu điểm học tập và IELTS của bạn với điểm chuẩn rồi báo ngay bạn đủ điều kiện vào trường nào.`,
   },
   {
     question: "Du học Mỹ thì thế nào ạ?",
-    answer: `Bên mình có nhận hồ sơ đi Mỹ. Trường tham chiếu của Mỹ trong hệ thống: ${truongTheoNuoc("Mỹ")}. Sau khi bạn nộp đủ giấy tờ, hệ thống đối chiếu điểm của bạn với điểm chuẩn và báo kết quả sơ bộ trong vài phút.`,
+    answer: `Bên mình có nhận hồ sơ đi Mỹ. Trường tham chiếu của Mỹ trong hệ thống:${truongTheoNuoc("Mỹ")}
+
+Sau khi bạn nộp đủ giấy tờ, hệ thống đối chiếu điểm của bạn với điểm chuẩn và báo kết quả sơ bộ trong vài phút.`,
   },
   {
     question: "Du học Canada thì sao?",
-    answer: `Bên mình có nhận hồ sơ đi Canada. Trường tham chiếu của Canada trong hệ thống: ${truongTheoNuoc("Canada")}. Bạn nộp hồ sơ trong cổng hồ sơ để hệ thống đối chiếu điểm giúp bạn.`,
+    answer: `Bên mình có nhận hồ sơ đi Canada. Trường tham chiếu của Canada trong hệ thống:${truongTheoNuoc("Canada")}
+
+Bạn nộp hồ sơ trong cổng hồ sơ để hệ thống đối chiếu điểm giúp bạn.`,
   },
   {
     question: "Nên chọn Úc, Mỹ hay Canada?",
