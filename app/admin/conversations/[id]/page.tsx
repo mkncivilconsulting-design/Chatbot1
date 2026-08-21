@@ -5,6 +5,8 @@ import { AdminPageHeader } from "@/components/admin/page-header";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { getConversationDetail, isValidConversationId } from "@/lib/conversations";
+import { docLead } from "@/lib/leads";
+import { LeadPanel } from "@/components/admin/lead-panel";
 
 // Đọc database theo từng request, không prerender.
 export const dynamic = "force-dynamic";
@@ -29,6 +31,8 @@ export default async function AdminConversationDetailPage({
 
   const conversation = await getConversationDetail(id);
   if (!conversation) notFound();
+
+  const lead = await docLead(id);
 
   const soCauHoi = conversation.messages.filter((m) => m.from === "user").length;
 
@@ -63,6 +67,12 @@ export default async function AdminConversationDetailPage({
           </div>
         </dl>
       </Card>
+
+      <LeadPanel
+        conversationId={conversation.id}
+        lead={lead}
+        soTinNhanHienTai={conversation.messages.length}
+      />
 
       <Card className="p-5">
         {conversation.messages.length === 0 ? (

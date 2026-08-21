@@ -11,6 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listConversations } from "@/lib/conversations";
+import { docChatLuongTheoHoiThoai } from "@/lib/leads";
+import { HuyHieuChatLuong } from "@/components/admin/lead-panel";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
 
 // Server Component: truy vấn chạy trên server bằng secret key, dữ liệu render sẵn
@@ -30,6 +32,7 @@ function formatTime(iso: string) {
 export default async function AdminConversationsPage() {
   const configured = isSupabaseConfigured();
   const conversations = configured ? await listConversations() : [];
+  const chatLuong = await docChatLuongTheoHoiThoai(conversations.map((c) => c.id));
 
   return (
     <>
@@ -44,6 +47,7 @@ export default async function AdminConversationsPage() {
             <TableRow>
               <TableHead>Kênh</TableHead>
               <TableHead>Câu hỏi đầu tiên</TableHead>
+              <TableHead>Lead</TableHead>
               <TableHead>Số tin nhắn</TableHead>
               <TableHead>Bắt đầu</TableHead>
               <TableHead>Gần nhất</TableHead>
@@ -58,6 +62,13 @@ export default async function AdminConversationsPage() {
                   <span className="line-clamp-1 text-muted-foreground">
                     {conv.preview ?? "—"}
                   </span>
+                </TableCell>
+                <TableCell>
+                  {chatLuong.has(conv.id) ? (
+                    <HuyHieuChatLuong chatLuong={chatLuong.get(conv.id)!} />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">chưa trích xuất</span>
+                  )}
                 </TableCell>
                 <TableCell>{conv.messageCount}</TableCell>
                 <TableCell className="text-muted-foreground">
@@ -80,7 +91,7 @@ export default async function AdminConversationsPage() {
 
             {conversations.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   {configured
                     ? "Chưa có hội thoại nào."
                     : "Chưa cấu hình SUPABASE_URL và SUPABASE_SECRET_KEY trong .env."}
