@@ -36,8 +36,14 @@ export function SchoolMatch({ matches }: { matches: { school: School; passed: bo
               </div>
             </div>
             <div className="text-right text-sm text-muted-foreground">
-              <p>Yêu cầu GPA ≥ {school.minGpa.toFixed(1)}</p>
-              <p>IELTS ≥ {school.minIelts.toFixed(1)}</p>
+              {school.minGpa === null || school.minIelts === null ? (
+                <p>Chưa có điểm chuẩn</p>
+              ) : (
+                <>
+                  <p>Yêu cầu GPA ≥ {school.minGpa.toFixed(1)}</p>
+                  <p>IELTS ≥ {school.minIelts.toFixed(1)}</p>
+                </>
+              )}
             </div>
           </div>
         ))}
