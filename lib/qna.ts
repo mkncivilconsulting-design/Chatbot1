@@ -3,9 +3,23 @@
 // nội dung trong file này, không được tự thêm thông tin nào khác.
 // Muốn chatbot biết thêm điều gì thì thêm một mục vào `qnaPairs` bên dưới.
 
+import { countries, schools } from "@/lib/mock-data";
+
 export interface QnaPair {
   question: string;
   answer: string;
+}
+
+// Phần trường + điểm chuẩn được SINH RA từ `schools`, không gõ cứng. Nhờ vậy khi
+// Tuần 3 chuyển dữ liệu trường sang database thì câu trả lời của bot tự khớp theo,
+// không bị nói sai điểm chuẩn.
+function truongTheoNuoc(nuoc: string) {
+  const list = schools.filter((s) => s.country === nuoc);
+  if (list.length === 0) return "hiện chưa có trường tham chiếu nào trong hệ thống";
+  // toFixed(1) để 7.0 không bị hiện thành "7" — ngưỡng điểm nên giữ một chữ số thập phân.
+  return list
+    .map((s) => `${s.name} (cần GPA từ ${s.minGpa.toFixed(1)}, IELTS từ ${s.minIelts.toFixed(1)})`)
+    .join("; ");
 }
 
 export const qnaPairs: QnaPair[] = [
@@ -88,6 +102,38 @@ export const qnaPairs: QnaPair[] = [
     question: "Em thấy áp lực và mệt mỏi quá, không biết chia sẻ với ai.",
     answer:
       "Mình rất tiếc khi bạn đang thấy như vậy. Mình chỉ là trợ lý tư vấn hồ sơ du học nên không thay thế được người hỗ trợ chuyên môn. Nếu cảm giác này kéo dài hoặc nặng hơn, bạn nên chia sẻ với người thân hoặc tìm tới chuyên gia tâm lý. Còn về hồ sơ du học thì bạn cứ hỏi mình nhé.",
+  },
+
+  // --- Nhóm câu hỏi theo quốc gia ---
+  // CHỈ nêu những gì hệ thống thật sự có: danh sách nước, trường tham chiếu kèm
+  // điểm chuẩn, và quy trình đối chiếu. KHÔNG nêu lệ phí visa, học phí, thời gian
+  // xét visa, quyền làm thêm hay định cư — bên mình chưa có dữ liệu đó, và bịa ra
+  // là tư vấn sai cho khách thật.
+  {
+    question: "Bên mình hỗ trợ du học những nước nào?",
+    answer: `Hiện bên mình nhận hồ sơ đi ${countries.join(", ")}. Bạn chọn quốc gia ngay trong form báo giá trên trang chủ.`,
+  },
+  {
+    question: "Em muốn du học Úc thì bên mình tư vấn được không?",
+    answer: `Được bạn nhé. Trường tham chiếu của Úc trong hệ thống: ${truongTheoNuoc("Úc")}. Bạn nộp hồ sơ trong cổng hồ sơ, hệ thống sẽ đối chiếu điểm học tập và IELTS của bạn với điểm chuẩn rồi báo ngay bạn có đủ điều kiện không.`,
+  },
+  {
+    question: "Du học Mỹ thì thế nào ạ?",
+    answer: `Bên mình có nhận hồ sơ đi Mỹ. Trường tham chiếu của Mỹ trong hệ thống: ${truongTheoNuoc("Mỹ")}. Sau khi bạn nộp đủ giấy tờ, hệ thống đối chiếu điểm của bạn với điểm chuẩn và báo kết quả sơ bộ trong vài phút.`,
+  },
+  {
+    question: "Du học Canada thì sao?",
+    answer: `Bên mình có nhận hồ sơ đi Canada. Trường tham chiếu của Canada trong hệ thống: ${truongTheoNuoc("Canada")}. Bạn nộp hồ sơ trong cổng hồ sơ để hệ thống đối chiếu điểm giúp bạn.`,
+  },
+  {
+    question: "Nên chọn Úc, Mỹ hay Canada?",
+    answer:
+      "Cái này còn tuỳ điểm số, ngành học và ngân sách của bạn nên mình không so sánh chung chung được. Cách rõ nhất là nộp hồ sơ trong cổng hồ sơ, hệ thống sẽ đối chiếu điểm của bạn với điểm chuẩn từng trường ở cả ba nước rồi báo trường nào bạn đủ điều kiện. Muốn nghe tư vấn kỹ hơn thì bạn để lại số điện thoại trong form báo giá, tư vấn viên sẽ trao đổi trực tiếp với bạn.",
+  },
+  {
+    question: "Đi Úc, Mỹ, Canada thì cần chuẩn bị giấy tờ khác nhau không?",
+    answer:
+      "Ở bước nộp hồ sơ trên hệ thống thì vẫn là 3 loại giấy tờ như nhau: bảng điểm học tập (PDF), ảnh chứng chỉ IELTS, và ảnh CMND/CCCD hoặc hộ chiếu. Nếu trường hoặc quốc gia bạn chọn cần thêm giấy tờ riêng, tư vấn viên sẽ báo bạn sau khi xem hồ sơ.",
   },
 ];
 
