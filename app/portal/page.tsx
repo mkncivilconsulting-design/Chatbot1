@@ -4,14 +4,12 @@ import { UploadGiayTo } from "@/components/portal/upload-giay-to";
 import { ThongTinTrichXuat } from "@/components/portal/thong-tin-trich-xuat";
 import { SchoolMatch } from "@/components/portal/school-match";
 import { docMaHoSo } from "@/app/portal/actions";
+import { GoiYHocBong } from "@/components/portal/goi-y-hoc-bong";
 import { docGiayTo, type GiayToDaNop } from "@/lib/student-profile";
-import { listSchools } from "@/lib/schools-db";
+import { doiChieuHoSo } from "@/lib/portal-matching";
+import { docGoiY } from "@/lib/scholarship-advisor";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
-import type {
-  TrichXuatBangDiem,
-  TrichXuatGiayTo,
-  TrichXuatIelts,
-} from "@/lib/document-extraction";
+import type { TrichXuatBangDiem, TrichXuatGiayTo } from "@/lib/document-extraction";
 
 // Đọc cookie + database theo từng request, không prerender.
 export const dynamic = "force-dynamic";
@@ -27,33 +25,20 @@ export default async function PortalPage() {
   const giayToTuyThan = tim("giay_to_tuy_than");
 
   const bd = bangDiem?.trichXuat as TrichXuatBangDiem | null | undefined;
-  const il = ielts?.trichXuat as TrichXuatIelts | null | undefined;
   const gt = giayToTuyThan?.trichXuat as TrichXuatGiayTo | null | undefined;
 
   // Tên lấy từ bảng điểm, không có thì lấy từ giấy tờ tuỳ thân.
   const hoTen = bd?.hoTen ?? gt?.hoTen ?? null;
 
-  // Đối chiếu điểm chuẩn: chỉ so được khi có CẢ điểm học tập lẫn điểm IELTS,
-  // và chỉ với những trường đã có điểm chuẩn trong hệ thống.
-  const gpa = bd?.diemTongKet ?? null;
-  const bandIelts = il?.diemTong ?? null;
-  const daDuDiem = gpa !== null && bandIelts !== null;
+  // Đối chiếu điểm chuẩn dùng chung một hàm với Server Action gợi ý học bổng,
+  // để hai bên không bao giờ tính ra kết quả khác nhau.
+  const ketDoiChieu = profileId
+    ? await doiChieuHoSo(profileId)
+    : { gpa: null, ielts: null, daDuDiem: false, doiChieu: [], truongDat: [] };
+  const { gpa, ielts: bandIelts, daDuDiem, doiChieu, truongDat } = ketDoiChieu;
+  const soTruongDat = truongDat.length;
 
-  const truong = configured && daDuDiem ? await listSchools() : [];
-  // So sánh trực tiếp với gpa/bandIelts (không qua biến daDuDiem) để TypeScript
-  // tự thu hẹp kiểu, khỏi phải ép kiểu bằng `!`.
-  const doiChieu =
-    gpa === null || bandIelts === null
-      ? []
-      : truong
-          .filter((s) => s.minGpa !== null && s.minIelts !== null)
-          .map((s) => ({
-            school: s,
-            passed: gpa >= (s.minGpa as number) && bandIelts >= (s.minIelts as number),
-          }))
-          // Trường đạt lên trước cho dễ nhìn.
-          .sort((a, b) => Number(b.passed) - Number(a.passed));
-  const soTruongDat = doiChieu.filter((m) => m.passed).length;
+  const goiY = profileId ? await docGoiY(profileId) : null;
 
   return (
     <>
@@ -115,7 +100,15 @@ export default async function PortalPage() {
               </p>
               <SchoolMatch matches={doiChieu} />
             </div>
-          ) : (
+          ) : null}
+
+          <GoiYHocBong
+            goiY={goiY}
+            soTruongDat={soTruongDat}
+            sanSang={daDuDiem && soTruongDat > 0}
+          />
+
+          {!daDuDiem && (
             <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
               Nộp cả bảng điểm và chứng chỉ IELTS để hệ thống đối chiếu điểm chuẩn giúp bạn.
             </p>

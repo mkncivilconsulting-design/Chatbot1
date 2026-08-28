@@ -19,6 +19,8 @@ import {
   taoHoSo,
 } from "@/lib/student-profile";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
+import { doiChieuHoSo } from "@/lib/portal-matching";
+import { goiYHocBong, luuGoiY } from "@/lib/scholarship-advisor";
 
 // Cookie chỉ chứa id hồ sơ (UUID). httpOnly nên JavaScript trong trình duyệt
 // không đọc được, và bản thân id cũng không cấp quyền gì — mọi truy vấn vẫn
@@ -121,6 +123,56 @@ export async function napGiayTo(formData: FormData): Promise<KetQuaNop> {
 
   if (!daLuu) {
     return { ok: false, loi: "Đọc được giấy tờ nhưng không lưu được. Bạn thử lại nhé." };
+  }
+
+  revalidatePath("/portal");
+  return { ok: true };
+}
+
+export interface KetQuaGoiY {
+  ok: boolean;
+  loi?: string;
+}
+
+/**
+ * Nhờ Gemini tra cứu và gợi ý học bổng.
+ *
+ * Hàm này KHÔNG nhận điểm hay danh sách trường từ client — nó đọc hồ sơ theo
+ * cookie rồi tự đối chiếu lại, để khách không thể tự khai điểm cao.
+ */
+export async function timHocBongPhuHop(): Promise<KetQuaGoiY> {
+  if (!isSupabaseConfigured()) {
+    return { ok: false, loi: "Hệ thống chưa được cấu hình. Vui lòng liên hệ quản trị viên." };
+  }
+
+  const profileId = await docMaHoSo();
+  if (!profileId || !(await hoSoTonTai(profileId))) {
+    return { ok: false, loi: "Chưa có hồ sơ. Bạn nộp giấy tờ trước nhé." };
+  }
+
+  const ket = await doiChieuHoSo(profileId);
+  if (!ket.daDuDiem) {
+    return { ok: false, loi: "Cần nộp cả bảng điểm và chứng chỉ IELTS trước đã bạn nhé." };
+  }
+  if (ket.truongDat.length === 0) {
+    return {
+      ok: false,
+      loi: "Hiện chưa có trường nào bạn đạt điểm chuẩn, nên chưa tra cứu học bổng được.",
+    };
+  }
+
+  const goiY = await goiYHocBong({
+    gpa: ket.gpa,
+    ielts: ket.ielts,
+    truongDat: ket.truongDat,
+  });
+  if (!goiY) {
+    return { ok: false, loi: "Chưa tra cứu được học bổng, bạn thử lại sau ít phút nhé." };
+  }
+
+  const daLuu = await luuGoiY(profileId, goiY, ket.truongDat.length);
+  if (!daLuu) {
+    return { ok: false, loi: "Tra cứu xong nhưng không lưu được kết quả. Bạn thử lại nhé." };
   }
 
   revalidatePath("/portal");
