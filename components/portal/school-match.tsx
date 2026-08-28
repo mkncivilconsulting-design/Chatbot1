@@ -1,9 +1,21 @@
 import { Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { School } from "@/lib/mock-data";
+// Chỉ khai báo đúng những trường cần dùng, để nhận được cả dữ liệu từ database
+// (SchoolRow) lẫn dữ liệu mẫu trong mock-data.
+interface TruongDeDoiChieu {
+  id: string;
+  name: string;
+  country: string;
+  minGpa: number | null;
+  minIelts: number | null;
+}
 
-export function SchoolMatch({ matches }: { matches: { school: School; passed: boolean }[] }) {
+export function SchoolMatch({
+  matches,
+}: {
+  matches: { school: TruongDeDoiChieu; passed: boolean }[];
+}) {
   return (
     <Card>
       <CardHeader>
