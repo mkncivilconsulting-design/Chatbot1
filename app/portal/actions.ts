@@ -7,6 +7,7 @@ import {
   MIME_CHO_PHEP,
   TEN_LOAI,
   docDuocGiTuGiayTo,
+  thieuTruongNao,
   trichXuatGiayTo,
   type LoaiGiayTo,
 } from "@/lib/document-extraction";
@@ -93,17 +94,28 @@ export async function napGiayTo(formData: FormData): Promise<KetQuaNop> {
 
   const trichXuat = await trichXuatGiayTo(loaiGiayTo, bytes, file.type);
 
-  // Đọc được ít nhất một trường thì coi là hợp lệ; không đọc được gì thì yêu cầu nộp lại.
-  const docDuoc = trichXuat !== null && docDuocGiTuGiayTo(trichXuat);
+  // Giấy tờ chỉ "hợp lệ" khi đọc được ĐỦ các trường bắt buộc. Đọc được vài trường
+  // mà thiếu trường quan trọng (ví dụ CCCD bị che mất số thẻ) thì vẫn phải nộp lại,
+  // và phải nói rõ thiếu trường nào để khách biết đường sửa.
+  const docDuocGiDo = trichXuat !== null && docDuocGiTuGiayTo(trichXuat);
+  const thieu = trichXuat === null ? [] : thieuTruongNao(loaiGiayTo, trichXuat);
+  const dat = docDuocGiDo && thieu.length === 0;
+
+  let lyDo: string | null = null;
+  if (!docDuocGiDo) {
+    lyDo =
+      "Không đọc được thông tin nào từ file này. Bạn thử chụp lại rõ nét hơn, đủ sáng, chụp thẳng và lấy trọn giấy tờ trong khung nhé.";
+  } else if (thieu.length > 0) {
+    lyDo = `Chưa đọc được ${thieu.join(" và ")}. Phần này có thể bị che, bị làm mờ hoặc loá sáng — bạn chụp lại sao cho nhìn rõ ${thieu.join(" và ")} giúp mình nhé.`;
+  }
+
   const daLuu = await luuGiayTo(profileId, loaiGiayTo, {
     tenFile: file.name,
     mime: file.type,
     kichThuoc: file.size,
     duongDanLuu,
-    trangThai: docDuoc ? "hop_le" : "can_nop_lai",
-    lyDo: docDuoc
-      ? null
-      : "Không đọc được thông tin từ file này. Bạn thử chụp lại rõ nét hơn, đủ sáng và không bị che góc nhé.",
+    trangThai: dat ? "hop_le" : "can_nop_lai",
+    lyDo,
     trichXuat,
   });
 

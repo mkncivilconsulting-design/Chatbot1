@@ -78,7 +78,14 @@ const CAU_HINH: Record<LoaiGiayTo, { huongDan: string; schema: object }> = {
     },
   },
   giay_to_tuy_than: {
-    huongDan: `${CHUNG}\nĐây là CMND/CCCD hoặc HỘ CHIẾU. soGiayTo là số CMND/CCCD hoặc số hộ chiếu in trên giấy tờ.`,
+    huongDan: `${CHUNG}
+Đây là CMND/CCCD của Việt Nam hoặc HỘ CHIẾU.
+soGiayTo là dãy định danh in trên giấy tờ:
+- Căn cước công dân: nhãn "Số" hoặc "No.", nằm dưới dòng "Căn cước công dân / Citizen Identity Card", gồm ĐÚNG 12 chữ số.
+- CMND cũ: 9 chữ số.
+- Hộ chiếu: nhãn "Số hộ chiếu / Passport No.", gồm 1 chữ cái và 7 chữ số.
+Chỉ ghi phần chữ và số, bỏ mọi dấu cách và dấu chấm. Đọc kỹ từng chữ số một.
+Nếu vùng chứa số bị che, bị làm mờ, loá sáng hay mất nét thì để null — đừng đoán theo định dạng.`,
     schema: {
       type: "OBJECT",
       properties: {
@@ -132,9 +139,36 @@ function chuanHoa(loai: LoaiGiayTo, raw: Record<string, unknown>): DuLieuTrichXu
   }
 }
 
-/** Đọc được ít nhất một trường có nghĩa thì coi là hợp lệ. */
+/** Đọc được ít nhất một trường có nghĩa. */
 export function docDuocGiTuGiayTo(du: DuLieuTrichXuat): boolean {
   return Object.values(du).some((v) => v !== null);
+}
+
+/**
+ * Những trường BẮT BUỘC phải đọc được thì giấy tờ mới dùng được cho hồ sơ.
+ * Thiếu một trong số này thì giấy tờ chưa đạt, dù các trường khác đọc tốt —
+ * ví dụ CCCD đọc được tên và ngày sinh nhưng số thẻ bị che thì vẫn phải nộp lại.
+ */
+const TRUONG_BAT_BUOC: Record<LoaiGiayTo, { khoa: string; nhan: string }[]> = {
+  bang_diem: [
+    { khoa: "hoTen", nhan: "họ tên" },
+    { khoa: "diemTongKet", nhan: "điểm học tập tổng kết" },
+  ],
+  ielts: [
+    { khoa: "hoTen", nhan: "họ tên trên chứng chỉ" },
+    { khoa: "diemTong", nhan: "điểm tổng (Overall)" },
+  ],
+  giay_to_tuy_than: [
+    { khoa: "hoTen", nhan: "họ tên" },
+    { khoa: "ngaySinh", nhan: "ngày sinh" },
+    { khoa: "soGiayTo", nhan: "số giấy tờ" },
+  ],
+};
+
+/** Tên các trường bắt buộc mà không đọc được. Rỗng nghĩa là giấy tờ đạt. */
+export function thieuTruongNao(loai: LoaiGiayTo, du: DuLieuTrichXuat): string[] {
+  const ban = du as unknown as Record<string, unknown>;
+  return TRUONG_BAT_BUOC[loai].filter((t) => ban[t.khoa] === null).map((t) => t.nhan);
 }
 
 /**

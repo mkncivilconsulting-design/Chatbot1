@@ -13,7 +13,7 @@ function O({ nhan, giaTri }: { nhan: string; giaTri: string | number | null }) {
     <div>
       <dt className="text-xs text-muted-foreground">{nhan}</dt>
       <dd className={cn("mt-0.5 text-sm", rong ? "text-muted-foreground" : "font-medium")}>
-        {rong ? "Không đọc được" : giaTri}
+        {rong ? "Chưa đọc được" : giaTri}
       </dd>
     </div>
   );
