@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { listSchools } from "@/lib/schools-db";
+import { danhSachHocBong } from "@/lib/scholarships";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
 
 // Đọc database theo từng request, không prerender.
@@ -38,6 +39,11 @@ export default async function SchoolsPage({ searchParams }: PageProps<"/schools"
     ? tatCa.filter((s) => s.country === nuocDangChon)
     : tatCa;
   const coDiemChuan = danhSach.filter((s) => s.minGpa !== null && s.minIelts !== null).length;
+
+  const tatCaHocBong = configured ? await danhSachHocBong() : [];
+  const hocBong = nuocDangChon
+    ? tatCaHocBong.filter((h) => h.quocGia === nuocDangChon)
+    : tatCaHocBong;
 
   return (
     <>
@@ -160,6 +166,65 @@ export default async function SchoolsPage({ searchParams }: PageProps<"/schools"
           Trường ghi “Chưa cập nhật” là bên mình chưa có số liệu điểm chuẩn, chưa dùng để đối chiếu
           tự động được. Bạn để lại liên hệ trong form báo giá để tư vấn viên kiểm tra giúp nhé.
         </p>
+
+        <section className="mt-16">
+          <h2 className="text-2xl font-medium tracking-tight">Học bổng</h2>
+          <p className="mt-2 max-w-2xl text-muted-foreground">
+            Học bổng hiện có theo từng trường{nuocDangChon ? ` ở ${nuocDangChon}` : ""}. Nộp hồ sơ
+            trong{" "}
+            <Link href="/portal" className="underline underline-offset-4 hover:text-foreground">
+              cổng hồ sơ
+            </Link>{" "}
+            để biết bạn đủ điều kiện học bổng nào.
+          </p>
+
+          <Card className="mt-6">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Học bổng</TableHead>
+                  <TableHead>Trường áp dụng</TableHead>
+                  <TableHead>Điều kiện tối thiểu</TableHead>
+                  <TableHead className="text-right">Mức hỗ trợ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {hocBong.map((h) => (
+                  <TableRow key={h.id}>
+                    <TableCell className="font-medium">{h.ten}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {h.tenTruong}
+                      {h.quocGia ? ` · ${h.quocGia}` : ""}
+                    </TableCell>
+                    <TableCell>{h.dieuKien}</TableCell>
+                    <TableCell className="text-right">
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset",
+                          h.hoTroPhanTram === 100
+                            ? "bg-green-100 text-green-700 ring-green-200"
+                            : "bg-muted text-foreground ring-border",
+                        )}
+                      >
+                        {h.hoTroMoTa}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+
+                {hocBong.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
+                      {configured
+                        ? `Chưa có học bổng nào${nuocDangChon ? ` cho trường ở ${nuocDangChon}` : ""}.`
+                        : "Danh sách học bổng đang được cập nhật, bạn quay lại sau nhé."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+        </section>
       </main>
       <SiteFooter />
     </>
