@@ -39,6 +39,7 @@ export const countries = [
   "Anh",
   "Úc",
   "Canada",
+  "New Zealand",
   "Hàn Quốc",
   "Nhật Bản",
 ] as const;

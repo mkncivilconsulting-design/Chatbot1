@@ -10,23 +10,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { schools } from "@/lib/mock-data";
+import { listSchools } from "@/lib/schools-db";
+import { isSupabaseConfigured } from "@/lib/supabase-server";
 
-// Xếp trường đã có hạng lên trước theo thứ tự hạng, trường chưa có hạng xuống cuối.
-// Dùng bản sao để không đụng vào thứ tự mảng gốc — currentStudent.matches trỏ theo index.
-const danhSach = [...schools].sort((a, b) => {
-  if (a.auRank === null && b.auRank === null) return 0;
-  if (a.auRank === null) return 1;
-  if (b.auRank === null) return -1;
-  return a.auRank - b.auRank;
-});
+// Đọc database theo từng request, không prerender.
+export const dynamic = "force-dynamic";
 
-export default function AdminSchoolsPage() {
+export default async function AdminSchoolsPage() {
+  const configured = isSupabaseConfigured();
+  // Thứ tự đã sắp sẵn trong truy vấn: có hạng lên trước, chưa có hạng xuống cuối.
+  const danhSach = configured ? await listSchools() : [];
+  const coDiemChuan = danhSach.filter((s) => s.minGpa !== null && s.minIelts !== null).length;
+
   return (
     <>
       <AdminPageHeader
         title="Trường tham chiếu"
-        description="Điểm chuẩn để đối chiếu hồ sơ, kèm xếp hạng THE World University Rankings 2026."
+        description={
+          configured
+            ? `${danhSach.length} trường đọc từ database · ${coDiemChuan} trường đã có điểm chuẩn để đối chiếu hồ sơ.`
+            : "Chưa cấu hình SUPABASE_URL và SUPABASE_SECRET_KEY trong .env."
+        }
         action={
           <Button>
             <Plus className="size-4" />
@@ -86,6 +90,16 @@ export default function AdminSchoolsPage() {
                 </TableCell>
               </TableRow>
             ))}
+
+            {danhSach.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                  {configured
+                    ? "Chưa có trường nào trong database."
+                    : "Chưa cấu hình SUPABASE_URL và SUPABASE_SECRET_KEY trong .env."}
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </Card>
