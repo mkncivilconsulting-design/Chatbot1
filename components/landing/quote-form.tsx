@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Check, Mail } from "lucide-react";
+import { Check, Mail, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { countries, servicePackages, type ServicePackage } from "@/lib/mock-data";
+import { thongTinLienHe } from "@/lib/qna";
 import { guiYeuCauBaoGia } from "@/app/actions";
 
 const degreeLevels = [
@@ -50,6 +51,8 @@ export function QuoteForm() {
   // Giá hiển thị lấy từ SERVER trả về, không phải từ state ở đây — để con số
   // khách thấy đúng bằng con số đã lưu vào database.
   const [giaDaChot, setGiaDaChot] = React.useState<number | null>(null);
+  // null = chưa gửi lần nào. true/false = kết quả gửi email của lần gửi gần nhất.
+  const [daGuiEmail, setDaGuiEmail] = React.useState<boolean | null>(null);
   const [loi, setLoi] = React.useState<string | null>(null);
   const [dangGui, batDau] = React.useTransition();
 
@@ -69,9 +72,12 @@ export function QuoteForm() {
 
     batDau(async () => {
       const ket = await guiYeuCauBaoGia(form);
-      if (ket.ok) setGiaDaChot(ket.gia ?? chosenPackage.price);
-      else {
+      if (ket.ok) {
+        setGiaDaChot(ket.gia ?? chosenPackage.price);
+        setDaGuiEmail(ket.daGuiEmail === true);
+      } else {
         setGiaDaChot(null);
+        setDaGuiEmail(null);
         setLoi(ket.loi ?? "Có lỗi xảy ra, bạn thử lại nhé.");
       }
     });
@@ -225,12 +231,23 @@ export function QuoteForm() {
                 <p className="text-3xl font-semibold tracking-tight text-accent-foreground">
                   {formatVnd(giaDaChot)}
                 </p>
-                <div className="flex items-start gap-2 text-sm text-accent-foreground">
-                  <Mail className="mt-0.5 size-4 shrink-0" />
-                  <span>
-                    Báo giá đã được gửi qua email, đội ngũ sẽ liên hệ trong 24h.
-                  </span>
-                </div>
+                {daGuiEmail ? (
+                  <div className="flex items-start gap-2 text-sm text-accent-foreground">
+                    <Mail className="mt-0.5 size-4 shrink-0" />
+                    <span>Báo giá đã được gửi qua email, đội ngũ sẽ liên hệ trong 24h.</span>
+                  </div>
+                ) : (
+                  // Yêu cầu ĐÃ lưu vào hệ thống, chỉ có bước gửi email là chưa xong.
+                  // Nói rõ để khách không ngồi chờ một email không bao giờ tới.
+                  <div className="flex items-start gap-2 rounded-lg bg-yellow-50 p-3 text-sm text-yellow-800 ring-1 ring-inset ring-yellow-200">
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                    <span>
+                      Yêu cầu của bạn đã được ghi nhận, nhưng hiện chưa gửi được email báo giá.
+                      Bạn không cần gửi lại — đội ngũ sẽ chủ động liên hệ trong 24h. Cần gấp thì
+                      bạn gọi {thongTinLienHe.dienThoai} nhé.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </form>

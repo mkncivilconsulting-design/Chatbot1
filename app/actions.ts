@@ -6,10 +6,19 @@ import { isSupabaseConfigured } from "@/lib/supabase-server";
 import { guiWebhookYeuCau } from "@/lib/webhook";
 
 export interface KetQuaGuiYeuCau {
+  /** Yêu cầu đã lưu được vào database hay chưa. */
   ok: boolean;
   loi?: string;
   /** Giá do SERVER chốt, để phần hiển thị kết quả dùng đúng con số đã lưu. */
   gia?: number;
+  /**
+   * Webhook Make có nhận thành công (HTTP 200) hay không.
+   *
+   * TÁCH RIÊNG khỏi `ok` là có chủ ý: yêu cầu lưu được nhưng webhook hỏng là
+   * chuyện có thật. Chính kịch bản Make mới là thứ gửi email báo giá, nên không
+   * được nói với khách "đã gửi email" khi webhook chưa nhận được gì.
+   */
+  daGuiEmail?: boolean;
 }
 
 const BAC_HOC_HOP_LE: BacHoc[] = ["thpt", "dai_hoc", "thac_si"];
@@ -65,9 +74,9 @@ export async function guiYeuCauBaoGia(formData: FormData): Promise<KetQuaGuiYeuC
   }
 
   // Bắn sang Make SAU KHI đã lưu chắc chắn vào database.
-  // Cố ý không chặn kết quả trả về: webhook hỏng thì chỉ mất phần tự động hoá,
-  // yêu cầu của khách vẫn nằm trong hệ thống và khách vẫn thấy báo giá.
-  await guiWebhookYeuCau({
+  // Webhook hỏng KHÔNG làm hỏng yêu cầu (ok vẫn true), nhưng có báo lại cho form
+  // biết để không nói dối khách là email đã gửi.
+  const daGuiEmail = await guiWebhookYeuCau({
     id,
     tenKhach,
     email,
@@ -75,5 +84,5 @@ export async function guiYeuCauBaoGia(formData: FormData): Promise<KetQuaGuiYeuC
     gia: goi.price,
   });
 
-  return { ok: true, gia: goi.price };
+  return { ok: true, gia: goi.price, daGuiEmail };
 }
