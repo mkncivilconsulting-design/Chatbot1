@@ -90,14 +90,37 @@ export async function danhSachYeuCau(limit = 100): Promise<YeuCauBaoGia[]> {
   }));
 }
 
-export async function doiTrangThai(id: string, trangThai: RequestStatus): Promise<boolean> {
+/**
+ * Đổi trạng thái và trả về thông tin khách của yêu cầu đó.
+ * Trả null nếu không đổi được — phía gọi cần tên/email để gửi webhook,
+ * nên lấy luôn trong cùng một lượt thay vì truy vấn thêm.
+ */
+export async function doiTrangThai(
+  id: string,
+  trangThai: RequestStatus,
+): Promise<{ id: string; tenKhach: string; email: string } | null> {
   const db = getSupabaseAdmin();
-  if (!db) return false;
+  if (!db) return null;
 
-  const { error } = await db.from("quote_requests").update({ trang_thai: trangThai }).eq("id", id);
+  const { data, error } = await db
+    .from("quote_requests")
+    .update({ trang_thai: trangThai })
+    .eq("id", id)
+    .select("id, ten_khach, email")
+    .maybeSingle();
+
   if (error) {
     console.error("[quote-requests] Không đổi được trạng thái:", error.message);
-    return false;
+    return null;
   }
-  return true;
+  if (!data) {
+    console.error("[quote-requests] Không tìm thấy yêu cầu:", id);
+    return null;
+  }
+
+  return {
+    id: data.id as string,
+    tenKhach: data.ten_khach as string,
+    email: data.email as string,
+  };
 }
