@@ -176,6 +176,16 @@ export function QuoteForm() {
 
             <div className="grid gap-6 sm:grid-cols-2">
               <div className="space-y-2">
+                <Label htmlFor="hoTen">Họ và tên</Label>
+                <Input
+                  id="hoTen"
+                  required
+                  placeholder="Nguyễn Văn A"
+                  value={hoTen}
+                  onChange={(e) => setHoTen(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="email">Email liên hệ</Label>
                 <Input
                   id="email"
@@ -199,15 +209,21 @@ export function QuoteForm() {
               </div>
             </div>
 
-            <Button type="submit" size="lg" className="w-full sm:w-auto">
-              Nhận báo giá
+            <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={dangGui}>
+              {dangGui ? "Đang gửi…" : "Nhận báo giá"}
             </Button>
 
-            {submitted && (
+            {loi && (
+              <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 ring-1 ring-inset ring-red-200">
+                {loi}
+              </p>
+            )}
+
+            {giaDaChot !== null && (
               <div className="space-y-3 rounded-xl border border-primary/20 bg-accent p-5">
                 <p className="text-sm text-muted-foreground">Mức giá dự kiến cho bạn</p>
                 <p className="text-3xl font-semibold tracking-tight text-accent-foreground">
-                  {formatVnd(chosenPackage.price)}
+                  {formatVnd(giaDaChot)}
                 </p>
                 <div className="flex items-start gap-2 text-sm text-accent-foreground">
                   <Mail className="mt-0.5 size-4 shrink-0" />
