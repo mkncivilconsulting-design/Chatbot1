@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { countries, servicePackages, type ServicePackage } from "@/lib/mock-data";
+import { guiYeuCauBaoGia } from "@/app/actions";
 
 const degreeLevels = [
   { value: "thpt", label: "THPT" },
@@ -40,18 +41,40 @@ function formatVnd(value: number) {
 }
 
 export function QuoteForm() {
+  const [hoTen, setHoTen] = React.useState("");
   const [country, setCountry] = React.useState<string>("");
   const [degreeLevel, setDegreeLevel] = React.useState<string>("dai_hoc");
   const [selectedPackage, setSelectedPackage] = React.useState<ServicePackage>("co_ban");
   const [email, setEmail] = React.useState("");
   const [phone, setPhone] = React.useState("");
-  const [submitted, setSubmitted] = React.useState(false);
+  // Giá hiển thị lấy từ SERVER trả về, không phải từ state ở đây — để con số
+  // khách thấy đúng bằng con số đã lưu vào database.
+  const [giaDaChot, setGiaDaChot] = React.useState<number | null>(null);
+  const [loi, setLoi] = React.useState<string | null>(null);
+  const [dangGui, batDau] = React.useTransition();
 
   const chosenPackage = servicePackages.find((p) => p.id === selectedPackage)!;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
+    setLoi(null);
+
+    const form = new FormData();
+    form.set("tenKhach", hoTen);
+    form.set("email", email);
+    form.set("soDienThoai", phone);
+    form.set("quocGia", country);
+    form.set("bacHoc", degreeLevel);
+    form.set("goiDichVu", selectedPackage);
+
+    batDau(async () => {
+      const ket = await guiYeuCauBaoGia(form);
+      if (ket.ok) setGiaDaChot(ket.gia ?? chosenPackage.price);
+      else {
+        setGiaDaChot(null);
+        setLoi(ket.loi ?? "Có lỗi xảy ra, bạn thử lại nhé.");
+      }
+    });
   }
 
   return (
