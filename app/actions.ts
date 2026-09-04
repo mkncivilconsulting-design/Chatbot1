@@ -3,6 +3,7 @@
 import { countries, servicePackages, type ServicePackage } from "@/lib/mock-data";
 import { luuYeuCauBaoGia, type BacHoc } from "@/lib/quote-requests";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
+import { guiWebhookYeuCau } from "@/lib/webhook";
 
 export interface KetQuaGuiYeuCau {
   ok: boolean;
@@ -49,7 +50,7 @@ export async function guiYeuCauBaoGia(formData: FormData): Promise<KetQuaGuiYeuC
   const goi = servicePackages.find((p) => p.id === goiRaw);
   if (!goi) return { ok: false, loi: "Gói dịch vụ không hợp lệ." };
 
-  const daLuu = await luuYeuCauBaoGia({
+  const id = await luuYeuCauBaoGia({
     tenKhach,
     email,
     soDienThoai,
@@ -59,9 +60,20 @@ export async function guiYeuCauBaoGia(formData: FormData): Promise<KetQuaGuiYeuC
     gia: goi.price,
   });
 
-  if (!daLuu) {
+  if (!id) {
     return { ok: false, loi: "Không gửi được yêu cầu. Bạn thử lại giúp mình nhé." };
   }
+
+  // Bắn sang Make SAU KHI đã lưu chắc chắn vào database.
+  // Cố ý không chặn kết quả trả về: webhook hỏng thì chỉ mất phần tự động hoá,
+  // yêu cầu của khách vẫn nằm trong hệ thống và khách vẫn thấy báo giá.
+  await guiWebhookYeuCau({
+    id,
+    tenKhach,
+    email,
+    goiDichVu: goi.name,
+    gia: goi.price,
+  });
 
   return { ok: true, gia: goi.price };
 }

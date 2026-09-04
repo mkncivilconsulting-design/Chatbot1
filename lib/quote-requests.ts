@@ -34,26 +34,31 @@ export interface DuLieuGui {
   gia: number;
 }
 
-export async function luuYeuCauBaoGia(du: DuLieuGui): Promise<boolean> {
+/** Trả về id của yêu cầu vừa lưu, hoặc null nếu lưu hỏng. */
+export async function luuYeuCauBaoGia(du: DuLieuGui): Promise<string | null> {
   const db = getSupabaseAdmin();
-  if (!db) return false;
+  if (!db) return null;
 
-  const { error } = await db.from("quote_requests").insert({
-    ten_khach: du.tenKhach,
-    email: du.email,
-    so_dien_thoai: du.soDienThoai,
-    quoc_gia: du.quocGia,
-    bac_hoc: du.bacHoc,
-    goi_dich_vu: du.goiDichVu,
-    gia: du.gia,
-    // trang_thai để mặc định 'cho_duyet'
-  });
+  const { data, error } = await db
+    .from("quote_requests")
+    .insert({
+      ten_khach: du.tenKhach,
+      email: du.email,
+      so_dien_thoai: du.soDienThoai,
+      quoc_gia: du.quocGia,
+      bac_hoc: du.bacHoc,
+      goi_dich_vu: du.goiDichVu,
+      gia: du.gia,
+      // trang_thai để mặc định 'cho_duyet'
+    })
+    .select("id")
+    .single();
 
   if (error) {
     console.error("[quote-requests] Không lưu được yêu cầu:", error.message);
-    return false;
+    return null;
   }
-  return true;
+  return data.id as string;
 }
 
 export async function danhSachYeuCau(limit = 100): Promise<YeuCauBaoGia[]> {
