@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { daCauHinhAuth, layDiaChiSite, taoClientAuth } from "@/lib/supabase-auth";
 import { duongDanQuayVeAnToan } from "@/lib/dal";
+import { thongTinLienHe } from "@/lib/qna";
 
 export interface KetQuaGuiLink {
   ok: boolean;
@@ -44,9 +45,20 @@ export async function guiMagicLink(formData: FormData): Promise<KetQuaGuiLink> {
     console.error("[login] signInWithOtp lỗi:", error.status, error.code, error.message);
 
     if (error.status === 429 || error.code === "over_email_send_rate_limit") {
+      // Supabase dùng chung mã lỗi cho hai giới hạn khác hẳn nhau:
+      // - từng email: phải cách nhau ~60 giây ("...only request this after 21 seconds")
+      // - cả dự án: tổng số email gửi mỗi giờ ("email rate limit exceeded") — với
+      //   SMTP mặc định của Supabase con số này rất thấp, cả site dùng chung.
+      const soGiay = error.message.match(/after (\d+) seconds?/)?.[1];
+      if (soGiay) {
+        return {
+          ok: false,
+          loi: `Bạn vừa yêu cầu link. Kiểm tra hộp thư (cả mục Spam), hoặc đợi ${soGiay} giây rồi gửi lại nhé.`,
+        };
+      }
       return {
         ok: false,
-        loi: "Bạn vừa yêu cầu link cách đây ít phút. Kiểm tra hộp thư (cả mục Spam) hoặc đợi một lát rồi thử lại nhé.",
+        loi: `Hệ thống đang tạm hết lượt gửi email đăng nhập, không phải do bạn. Bạn thử lại sau khoảng một giờ, hoặc gọi ${thongTinLienHe.dienThoai} để được hỗ trợ nhé.`,
       };
     }
     if (error.code === "email_address_not_authorized") {

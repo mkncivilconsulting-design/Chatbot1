@@ -37,8 +37,17 @@ export function kiemTraBasicAuth(header: string | null | undefined): boolean {
     return false;
   }
 
-  // Định dạng Basic Auth là "tên:mật khẩu". Bên mình bỏ qua phần tên đăng nhập.
+  // Định dạng Basic Auth là "tên:mật khẩu". Có đặt ADMIN_USERNAME thì kiểm tra
+  // cả tên; để trống thì chỉ kiểm tra mật khẩu, tên gõ gì cũng được.
   const dauHai = giaiMa.indexOf(":");
-  const nhapVao = dauHai === -1 ? "" : giaiMa.slice(dauHai + 1);
-  return bangNhau(nhapVao, matKhau);
+  if (dauHai === -1) return false;
+  const tenNhap = giaiMa.slice(0, dauHai);
+  const matKhauNhap = giaiMa.slice(dauHai + 1);
+
+  const ten = process.env.ADMIN_USERNAME;
+  // Tính cả hai phép so sánh rồi mới kết hợp, để thời gian phản hồi không lộ
+  // là sai tên hay sai mật khẩu.
+  const dungTen = ten ? bangNhau(tenNhap, ten) : true;
+  const dungMatKhau = bangNhau(matKhauNhap, matKhau);
+  return dungTen && dungMatKhau;
 }
