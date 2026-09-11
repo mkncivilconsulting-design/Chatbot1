@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { daCauHinhMatKhau, kiemTraBasicAuth } from "@/lib/admin-auth";
+import { TUY_CHON_COOKIE_AUTH } from "@/lib/supabase-auth";
 
 // Ở Next.js 16, file này tên `proxy.ts` — `middleware.ts` đã bị deprecated.
 //
@@ -40,6 +41,7 @@ async function chanCongHoSo(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(url, key, {
+    cookieOptions: TUY_CHON_COOKIE_AUTH,
     cookies: {
       getAll() {
         return request.cookies.getAll();

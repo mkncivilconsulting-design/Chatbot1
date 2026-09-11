@@ -14,6 +14,17 @@ export function daCauHinhAuth() {
   return Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 }
 
+// Mặc định @supabase/ssr ghi cookie phiên với httpOnly = false để code JavaScript
+// phía trình duyệt đọc được. Site này làm mọi thứ về đăng nhập ở server, nên
+// bật httpOnly: script lạ chèn vào trang (XSS) cũng không lấy cắp được token.
+// proxy.ts dùng chung cấu hình này — hai nơi ghi cookie phải giống hệt nhau.
+export const TUY_CHON_COOKIE_AUTH = {
+  httpOnly: true,
+  sameSite: "lax",
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+} as const;
+
 /**
  * Client Supabase Auth đọc/ghi phiên đăng nhập qua cookie.
  *
@@ -30,6 +41,7 @@ export async function taoClientAuth() {
   const store = await cookies();
 
   return createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    cookieOptions: TUY_CHON_COOKIE_AUTH,
     cookies: {
       getAll() {
         return store.getAll();
