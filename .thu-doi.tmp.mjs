@@ -1,0 +1,17 @@
+import { readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+const env = Object.fromEntries(readFileSync(".env","utf8").split(/\r?\n/).filter(l=>l&&!l.startsWith("#")&&l.includes("=")).map(l=>[l.slice(0,l.indexOf("=")),l.slice(l.indexOf("=")+1)]));
+const o = { auth: { persistSession: false, autoRefreshToken: false } };
+const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, o);
+const pub = createClient(env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY, o);
+const email = `thu-doi-mk-${Date.now()}@example.com`, cu = randomBytes(12).toString("base64url"), moi = randomBytes(12).toString("base64url");
+const { data: t } = await admin.auth.admin.createUser({ email, password: cu, email_confirm: true });
+await pub.auth.signInWithPassword({ email, password: cu });
+const { error: e1 } = await pub.auth.updateUser({ password: moi });
+console.log("updateUser (đổi mật khẩu khi đang đăng nhập):", e1 ? `LỖI ${e1.status} ${e1.code}` : "ok");
+const { error: e2 } = await pub.auth.signInWithPassword({ email, password: moi });
+console.log("Đăng nhập bằng mật khẩu mới:", e2 ? `LỖI ${e2.code}` : "ok");
+const { error: e3 } = await pub.auth.signInWithPassword({ email, password: cu });
+console.log("Mật khẩu cũ:", e3 ? `bị từ chối (${e3.code})` : "!!! vẫn vào được");
+console.log("Xoá user thử:", (await admin.auth.admin.deleteUser(t.user.id)).error ? "LỖI" : "ok");
