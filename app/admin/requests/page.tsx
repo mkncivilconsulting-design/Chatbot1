@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/table";
 import { danhSachYeuCau, TEN_BAC_HOC } from "@/lib/quote-requests";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
+import { taoClientAuth } from "@/lib/supabase-auth";
+import { batBuocQuanTri } from "@/lib/dal";
 import { servicePackages } from "@/lib/mock-data";
 
 // Đọc database theo từng request, không prerender.
@@ -36,8 +38,12 @@ function formatTime(iso: string) {
 }
 
 export default async function AdminRequestsPage() {
+  const taiKhoan = await batBuocQuanTri("/admin/requests");
+  const laAdmin = taiKhoan.vaiTro === "admin";
+
   const configured = isSupabaseConfigured();
-  const yeuCau = configured ? await danhSachYeuCau() : [];
+  // Đọc bằng phiên của người đăng nhập → RLS quyết định được xem gì.
+  const yeuCau = configured ? await danhSachYeuCau(await taoClientAuth()) : [];
   const choDuyet = yeuCau.filter((y) => y.trangThai === "cho_duyet").length;
 
   return (
@@ -62,7 +68,7 @@ export default async function AdminRequestsPage() {
               <TableHead>Báo giá</TableHead>
               <TableHead>Trạng thái</TableHead>
               <TableHead>Thời gian</TableHead>
-              <TableHead className="text-right">Thao tác</TableHead>
+              {laAdmin && <TableHead className="text-right">Thao tác</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -82,15 +88,21 @@ export default async function AdminRequestsPage() {
                   <RequestStatusBadge status={y.trangThai} />
                 </TableCell>
                 <TableCell className="text-muted-foreground">{formatTime(y.createdAt)}</TableCell>
-                <TableCell>
-                  <NutDuyet id={y.id} trangThai={y.trangThai} />
-                </TableCell>
+                {/* Nhân viên chỉ xem: không render nút duyệt/từ chối. */}
+                {laAdmin && (
+                  <TableCell>
+                    <NutDuyet id={y.id} trangThai={y.trangThai} />
+                  </TableCell>
+                )}
               </TableRow>
             ))}
 
             {yeuCau.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={laAdmin ? 8 : 7}
+                  className="py-10 text-center text-muted-foreground"
+                >
                   {configured
                     ? "Chưa có yêu cầu báo giá nào."
                     : "Chưa cấu hình SUPABASE_URL và SUPABASE_SECRET_KEY trong .env."}

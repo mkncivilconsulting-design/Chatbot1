@@ -16,7 +16,14 @@ const CAC_CHE_DO: { id: CheDo; nhan: string }[] = [
   { id: "tao_tai_khoan", nhan: "Tạo tài khoản" },
 ];
 
-export function FormDangNhap({ next }: { next: string }) {
+export function FormDangNhap({
+  next,
+  choPhepTaoTaiKhoan = true,
+}: {
+  next: string;
+  /** Trang đăng nhập quản trị tắt tab này: tài khoản nhân sự do admin tạo. */
+  choPhepTaoTaiKhoan?: boolean;
+}) {
   const [cheDo, setCheDo] = React.useState<CheDo>("dang_nhap");
   const [email, setEmail] = React.useState("");
   const [matKhau, setMatKhau] = React.useState("");
@@ -57,25 +64,30 @@ export function FormDangNhap({ next }: { next: string }) {
 
   return (
     <div className="space-y-6">
-      <div role="tablist" className="grid grid-cols-2 gap-1 rounded-full bg-muted p-1">
-        {CAC_CHE_DO.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            role="tab"
-            aria-selected={cheDo === c.id}
-            onClick={() => doiCheDo(c.id)}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-sm font-medium duration-150",
-              cheDo === c.id
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {c.nhan}
-          </button>
-        ))}
-      </div>
+      {choPhepTaoTaiKhoan && (
+        <div
+          role="tablist"
+          className="grid grid-cols-2 gap-1 rounded-full bg-muted p-1"
+        >
+          {CAC_CHE_DO.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={cheDo === c.id}
+              onClick={() => doiCheDo(c.id)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-sm font-medium duration-150",
+                cheDo === c.id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {c.nhan}
+            </button>
+          ))}
+        </div>
+      )}
 
       <form onSubmit={gui} className="space-y-5">
         <div className="space-y-2">
@@ -115,11 +127,17 @@ export function FormDangNhap({ next }: { next: string }) {
               aria-label={hienMatKhau ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
               className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
             >
-              {hienMatKhau ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              {hienMatKhau ? (
+                <EyeOff className="size-4" />
+              ) : (
+                <Eye className="size-4" />
+              )}
             </button>
           </div>
           {taoMoi && (
-            <p className="text-xs text-muted-foreground">Ít nhất {MAT_KHAU_TOI_THIEU} ký tự.</p>
+            <p className="text-xs text-muted-foreground">
+              Ít nhất {MAT_KHAU_TOI_THIEU} ký tự.
+            </p>
           )}
         </div>
 

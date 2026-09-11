@@ -69,6 +69,7 @@ export async function napGiayTo(formData: FormData): Promise<KetQuaNop> {
   const profileId = await layHoSoCuaNguoiDung(nguoiDung.id, {
     maHoSoCu: await docMaHoSoCu(),
     taoMoi: true,
+    email: nguoiDung.email,
   });
   if (!profileId) {
     return { ok: false, loi: "Không tạo được hồ sơ. Bạn thử lại giúp mình nhé." };

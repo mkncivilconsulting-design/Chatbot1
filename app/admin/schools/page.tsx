@@ -12,11 +12,17 @@ import {
 } from "@/components/ui/table";
 import { listSchools } from "@/lib/schools-db";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
+import { batBuocQuanTri } from "@/lib/dal";
 
 // Đọc database theo từng request, không prerender.
 export const dynamic = "force-dynamic";
 
 export default async function AdminSchoolsPage() {
+  const taiKhoan = await batBuocQuanTri("/admin/schools");
+  // Nút thêm/sửa/xoá trường chỉ hiện cho admin. (Hiện các nút này mới là giao
+  // diện mẫu, chưa gắn chức năng.)
+  const laAdmin = taiKhoan.vaiTro === "admin";
+
   const configured = isSupabaseConfigured();
   // Thứ tự đã sắp sẵn trong truy vấn: có hạng lên trước, chưa có hạng xuống cuối.
   const danhSach = configured ? await listSchools() : [];
@@ -32,10 +38,12 @@ export default async function AdminSchoolsPage() {
             : "Chưa cấu hình SUPABASE_URL và SUPABASE_SECRET_KEY trong .env."
         }
         action={
-          <Button>
-            <Plus className="size-4" />
-            Thêm trường mới
-          </Button>
+          laAdmin ? (
+            <Button>
+              <Plus className="size-4" />
+              Thêm trường mới
+            </Button>
+          ) : undefined
         }
       />
 
@@ -50,7 +58,7 @@ export default async function AdminSchoolsPage() {
               <TableHead>Hạng thế giới (THE 2026)</TableHead>
               <TableHead>Điểm học tập tối thiểu</TableHead>
               <TableHead>Điểm IELTS tối thiểu</TableHead>
-              <TableHead className="text-right">Thao tác</TableHead>
+              {laAdmin && <TableHead className="text-right">Thao tác</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -78,22 +86,27 @@ export default async function AdminSchoolsPage() {
                 <TableCell className={school.minIelts === null ? "text-muted-foreground" : undefined}>
                   {school.minIelts === null ? "Chưa có" : school.minIelts.toFixed(1)}
                 </TableCell>
-                <TableCell>
-                  <div className="flex justify-end gap-2">
-                    <Button size="icon-sm" variant="outline" aria-label="Sửa">
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    <Button size="icon-sm" variant="outline" aria-label="Xoá">
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                </TableCell>
+                {laAdmin && (
+                  <TableCell>
+                    <div className="flex justify-end gap-2">
+                      <Button size="icon-sm" variant="outline" aria-label="Sửa">
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button size="icon-sm" variant="outline" aria-label="Xoá">
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
 
             {danhSach.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={laAdmin ? 8 : 7}
+                  className="py-10 text-center text-muted-foreground"
+                >
                   {configured
                     ? "Chưa có trường nào trong database."
                     : "Chưa cấu hình SUPABASE_URL và SUPABASE_SECRET_KEY trong .env."}

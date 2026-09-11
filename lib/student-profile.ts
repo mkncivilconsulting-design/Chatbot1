@@ -103,7 +103,11 @@ export async function nhanHoSoCu(userId: string, maHoSoCu: string | null): Promi
  */
 export async function layHoSoCuaNguoiDung(
   userId: string,
-  { maHoSoCu = null, taoMoi = false }: { maHoSoCu?: string | null; taoMoi?: boolean } = {},
+  {
+    maHoSoCu = null,
+    taoMoi = false,
+    email = null,
+  }: { maHoSoCu?: string | null; taoMoi?: boolean; email?: string | null } = {},
 ): Promise<string | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
@@ -125,9 +129,11 @@ export async function layHoSoCuaNguoiDung(
 
   if (!taoMoi) return null;
 
+  // Lưu kèm email để trang quản trị biết hồ sơ này của ai (bảng auth.users
+  // không mở ra API nên không join được).
   const { data: moi, error: loiTao } = await db
     .from("student_profiles")
-    .insert({ user_id: userId })
+    .insert({ user_id: userId, email })
     .select("id")
     .single();
 

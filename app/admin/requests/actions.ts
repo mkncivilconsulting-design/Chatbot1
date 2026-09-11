@@ -1,8 +1,8 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { kiemTraBasicAuth } from "@/lib/admin-auth";
+import { kiemTraAdmin } from "@/lib/dal";
+import { taoClientAuth } from "@/lib/supabase-auth";
 import { doiTrangThai } from "@/lib/quote-requests";
 import { guiWebhookDuyet } from "@/lib/webhook";
 import type { RequestStatus } from "@/lib/mock-data";
@@ -23,16 +23,14 @@ export interface KetQuaDuyet {
 }
 
 /**
- * Đổi trạng thái một yêu cầu báo giá.
+ * Đổi trạng thái một yêu cầu báo giá — CHỈ ADMIN.
  *
- * proxy.ts đã chặn /admin/*, nhưng action vẫn tự kiểm tra quyền: nếu sau này
- * matcher trong proxy đổi, đây không được âm thầm thành cửa sửa dữ liệu khách.
+ * Hai lớp chặn: kiểm tra vai trò ngay đầu hàm, và câu UPDATE chạy bằng phiên
+ * của người đăng nhập nên RLS trong database chặn tiếp nếu không phải admin.
  */
 export async function duyetYeuCau(id: string, trangThai: RequestStatus): Promise<KetQuaDuyet> {
-  const h = await headers();
-  if (!kiemTraBasicAuth(h.get("authorization"))) {
-    console.error("[admin/requests] Chặn lời gọi đổi trạng thái không có quyền");
-    return { ok: false, loi: "Không có quyền thực hiện thao tác này." };
+  if (!(await kiemTraAdmin())) {
+    return { ok: false, loi: "Chỉ admin mới được duyệt hoặc từ chối yêu cầu." };
   }
 
   if (!UUID_RE.test(id)) return { ok: false, loi: "Mã yêu cầu không hợp lệ." };
@@ -40,7 +38,7 @@ export async function duyetYeuCau(id: string, trangThai: RequestStatus): Promise
     return { ok: false, loi: "Trạng thái không hợp lệ." };
   }
 
-  const khach = await doiTrangThai(id, trangThai);
+  const khach = await doiTrangThai(await taoClientAuth(), id, trangThai);
   if (!khach) return { ok: false, loi: "Không cập nhật được, bạn thử lại nhé." };
 
   revalidatePath("/admin/requests");

@@ -1,7 +1,10 @@
 import "server-only";
 
-import { getSupabaseAdmin } from "@/lib/supabase-server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChatLuongLead, LeadTrichXuat } from "@/lib/lead-extraction";
+
+// Mọi hàm ở đây nhận `db` là client của NHÂN SỰ đang đăng nhập: RLS cho cả
+// admin lẫn nhân viên đọc lead, nhưng chỉ admin được ghi.
 
 export interface LeadDaLuu extends LeadTrichXuat {
   conversationId: string;
@@ -11,10 +14,7 @@ export interface LeadDaLuu extends LeadTrichXuat {
 }
 
 /** Đọc lead của một hội thoại. null nghĩa là chưa trích xuất lần nào. */
-export async function docLead(conversationId: string): Promise<LeadDaLuu | null> {
-  const db = getSupabaseAdmin();
-  if (!db) return null;
-
+export async function docLead(db: SupabaseClient, conversationId: string): Promise<LeadDaLuu | null> {
   const { data, error } = await db
     .from("leads")
     .select("*")
@@ -44,48 +44,77 @@ export async function docLead(conversationId: string): Promise<LeadDaLuu | null>
   };
 }
 
-/** Ghi đè lead của một hội thoại (khoá chính là conversation_id nên upsert). */
+function thanhCot(lead: LeadTrichXuat) {
+  return {
+    ten: lead.ten,
+    email: lead.email,
+    so_dien_thoai: lead.soDienThoai,
+    nuoc_du_hoc: lead.nuocDuHoc,
+    bac_hoc: lead.bacHoc,
+    nganh_hoc: lead.nganhHoc,
+    thoi_gian_ranh: lead.thoiGianRanh,
+    da_dat_lich: lead.daDatLich,
+    ghi_chu: lead.ghiChu,
+    chat_luong: lead.chatLuong,
+  };
+}
+
+/** Ghi đè lead sau khi Gemini trích xuất (khoá chính là conversation_id nên upsert). */
 export async function luuLead(
+  db: SupabaseClient,
   conversationId: string,
   lead: LeadTrichXuat,
   soTinNhan: number,
 ): Promise<boolean> {
-  const db = getSupabaseAdmin();
-  if (!db) return false;
-
-  const { error } = await db.from("leads").upsert(
-    {
-      conversation_id: conversationId,
-      ten: lead.ten,
-      email: lead.email,
-      so_dien_thoai: lead.soDienThoai,
-      nuoc_du_hoc: lead.nuocDuHoc,
-      bac_hoc: lead.bacHoc,
-      nganh_hoc: lead.nganhHoc,
-      thoi_gian_ranh: lead.thoiGianRanh,
-      da_dat_lich: lead.daDatLich,
-      ghi_chu: lead.ghiChu,
-      chat_luong: lead.chatLuong,
-      so_tin_nhan_luc_trich: soTinNhan,
-      trich_xuat_luc: new Date().toISOString(),
-    },
-    { onConflict: "conversation_id" },
-  );
+  const { data, error } = await db
+    .from("leads")
+    .upsert(
+      {
+        conversation_id: conversationId,
+        ...thanhCot(lead),
+        so_tin_nhan_luc_trich: soTinNhan,
+        trich_xuat_luc: new Date().toISOString(),
+      },
+      { onConflict: "conversation_id" },
+    )
+    .select("conversation_id");
 
   if (error) {
-    console.error("[leads] Không lưu được lead:", error.message);
+    console.error("[leads] Không lưu được lead:", error.code, error.message);
     return false;
   }
-  return true;
+  return (data?.length ?? 0) > 0;
+}
+
+/**
+ * Admin sửa tay thông tin lead. Chỉ UPDATE (không tạo mới): phải trích xuất ít
+ * nhất một lần rồi mới có lead để sửa. 0 dòng bị sửa = không có quyền.
+ */
+export async function suaLead(
+  db: SupabaseClient,
+  conversationId: string,
+  lead: LeadTrichXuat,
+): Promise<boolean> {
+  const { data, error } = await db
+    .from("leads")
+    .update(thanhCot(lead))
+    .eq("conversation_id", conversationId)
+    .select("conversation_id");
+
+  if (error) {
+    console.error("[leads] Không sửa được lead:", error.code, error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
 }
 
 /** Chất lượng lead của nhiều hội thoại, để hiển thị ở trang danh sách. */
 export async function docChatLuongTheoHoiThoai(
+  db: SupabaseClient,
   ids: string[],
 ): Promise<Map<string, ChatLuongLead>> {
   const ket = new Map<string, ChatLuongLead>();
-  const db = getSupabaseAdmin();
-  if (!db || ids.length === 0) return ket;
+  if (ids.length === 0) return ket;
 
   const { data, error } = await db
     .from("leads")

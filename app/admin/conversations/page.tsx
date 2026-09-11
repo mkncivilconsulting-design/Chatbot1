@@ -14,9 +14,12 @@ import { listConversations } from "@/lib/conversations";
 import { docChatLuongTheoHoiThoai } from "@/lib/leads";
 import { HuyHieuChatLuong } from "@/components/admin/lead-panel";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
+import { taoClientAuth } from "@/lib/supabase-auth";
+import { batBuocQuanTri } from "@/lib/dal";
 
-// Server Component: truy vấn chạy trên server bằng secret key, dữ liệu render sẵn
-// thành HTML rồi mới gửi xuống. Trình duyệt không hề gọi Supabase.
+// Server Component: truy vấn chạy trên server bằng phiên của nhân sự đang đăng
+// nhập (RLS quyết định được xem gì), dữ liệu render sẵn thành HTML rồi mới gửi
+// xuống. Trình duyệt không hề gọi Supabase.
 export const dynamic = "force-dynamic";
 
 function formatTime(iso: string) {
@@ -30,9 +33,12 @@ function formatTime(iso: string) {
 }
 
 export default async function AdminConversationsPage() {
+  await batBuocQuanTri("/admin/conversations");
+
   const configured = isSupabaseConfigured();
-  const conversations = configured ? await listConversations() : [];
-  const chatLuong = await docChatLuongTheoHoiThoai(conversations.map((c) => c.id));
+  const db = await taoClientAuth();
+  const conversations = configured ? await listConversations(db) : [];
+  const chatLuong = await docChatLuongTheoHoiThoai(db, conversations.map((c) => c.id));
 
   return (
     <>

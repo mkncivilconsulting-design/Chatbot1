@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 import { getConversationDetail, isValidConversationId } from "@/lib/conversations";
 import { docLead } from "@/lib/leads";
 import { LeadPanel } from "@/components/admin/lead-panel";
+import { NutXoa } from "@/components/admin/nut-xac-nhan";
+import { batBuocQuanTri } from "@/lib/dal";
+import { taoClientAuth } from "@/lib/supabase-auth";
+import { xoaHoiThoaiAction } from "@/app/admin/conversations/[id]/actions";
 
 // Đọc database theo từng request, không prerender.
 export const dynamic = "force-dynamic";
@@ -25,14 +29,17 @@ export default async function AdminConversationDetailPage({
   params,
 }: PageProps<"/admin/conversations/[id]">) {
   const { id } = await params;
+  const taiKhoan = await batBuocQuanTri(`/admin/conversations/${id}`);
+  const laAdmin = taiKhoan.vaiTro === "admin";
 
   // Chặn sớm id rác để không đem chuỗi bậy đi truy vấn database.
   if (!isValidConversationId(id)) notFound();
 
-  const conversation = await getConversationDetail(id);
+  const db = await taoClientAuth();
+  const conversation = await getConversationDetail(db, id);
   if (!conversation) notFound();
 
-  const lead = await docLead(id);
+  const lead = await docLead(db, id);
 
   const soCauHoi = conversation.messages.filter((m) => m.from === "user").length;
 
@@ -49,6 +56,16 @@ export default async function AdminConversationDetailPage({
       <AdminPageHeader
         title="Chi tiết hội thoại"
         description={`Kênh ${conversation.channel} · ${conversation.messages.length} tin nhắn · ${soCauHoi} câu hỏi của khách`}
+        action={
+          // Nhân viên chỉ xem: không render nút xoá.
+          laAdmin ? (
+            <NutXoa
+              nhan="Xoá hội thoại"
+              cauHoi="Xoá hội thoại này cùng toàn bộ tin nhắn và lead?"
+              hanhDong={xoaHoiThoaiAction.bind(null, conversation.id)}
+            />
+          ) : undefined
+        }
       />
 
       <Card className="mb-6 p-5">
@@ -72,6 +89,7 @@ export default async function AdminConversationDetailPage({
         conversationId={conversation.id}
         lead={lead}
         soTinNhanHienTai={conversation.messages.length}
+        laAdmin={laAdmin}
       />
 
       <Card className="p-5">

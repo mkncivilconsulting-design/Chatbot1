@@ -35,6 +35,67 @@ export async function batBuocDangNhap(quayVe = "/portal"): Promise<NguoiDung> {
   return nguoiDung;
 }
 
+// ---------------------------------------------------------------------------
+// TRANG QUẢN TRỊ
+// ---------------------------------------------------------------------------
+
+export type VaiTro = "admin" | "nhan_vien";
+
+export const TEN_VAI_TRO: Record<VaiTro, string> = {
+  admin: "Admin",
+  nhan_vien: "Nhân viên",
+};
+
+export interface TaiKhoanQuanTri extends NguoiDung {
+  vaiTro: VaiTro;
+}
+
+/**
+ * Vai trò quản trị của người đang đăng nhập, hoặc null nếu chưa đăng nhập /
+ * không có vai trò. Đọc bảng tai_khoan_quan_tri qua RLS bằng phiên của chính
+ * họ, nên không ai tự nhận vai trò được.
+ */
+export const layTaiKhoanQuanTri = cache(async (): Promise<TaiKhoanQuanTri | null> => {
+  const nguoiDung = await layNguoiDung();
+  if (!nguoiDung) return null;
+
+  const db = await taoClientAuth();
+  const { data, error } = await db
+    .from("tai_khoan_quan_tri")
+    .select("vai_tro")
+    .eq("user_id", nguoiDung.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[dal] Không đọc được vai trò:", error.message);
+    return null;
+  }
+  if (data?.vai_tro !== "admin" && data?.vai_tro !== "nhan_vien") return null;
+  return { ...nguoiDung, vaiTro: data.vai_tro };
+});
+
+/**
+ * Bắt buộc có vai trò quản trị để xem trang. Mỗi trang /admin gọi hàm này —
+ * không dựa vào layout, vì layout không chạy lại khi chuyển trang.
+ *
+ * Chưa đăng nhập, hoặc đăng nhập mà không có vai trò → về trang đăng nhập quản
+ * trị (trang đó tự báo "không có quyền" nếu đã đăng nhập).
+ */
+export async function batBuocQuanTri(quayVe = "/admin"): Promise<TaiKhoanQuanTri> {
+  const taiKhoan = await layTaiKhoanQuanTri();
+  if (!taiKhoan) redirect(`/dang-nhap-quan-tri?next=${encodeURIComponent(quayVe)}`);
+  return taiKhoan;
+}
+
+/**
+ * Dùng trong Server Action sửa/xoá: trả về tài khoản nếu là admin, ngược lại
+ * null. Đây là lớp chặn thứ nhất; lớp cuối cùng là RLS trong database.
+ */
+export async function kiemTraAdmin(): Promise<TaiKhoanQuanTri | null> {
+  const taiKhoan = await layTaiKhoanQuanTri();
+  return taiKhoan?.vaiTro === "admin" ? taiKhoan : null;
+}
+
 /**
  * Chỉ chấp nhận đường dẫn nội bộ cho tham số `next`, chặn kiểu tấn công
  * open redirect (`next=https://trang-lua-dao.com` hoặc `next=//trang-lua-dao.com`).

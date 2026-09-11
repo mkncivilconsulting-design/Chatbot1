@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import type { RequestStatus, ServicePackage } from "@/lib/mock-data";
 
@@ -61,10 +62,8 @@ export async function luuYeuCauBaoGia(du: DuLieuGui): Promise<string | null> {
   return data.id as string;
 }
 
-export async function danhSachYeuCau(limit = 100): Promise<YeuCauBaoGia[]> {
-  const db = getSupabaseAdmin();
-  if (!db) return [];
-
+/** Danh sách cho trang quản trị — đọc bằng client của nhân sự đang đăng nhập (RLS). */
+export async function danhSachYeuCau(db: SupabaseClient, limit = 100): Promise<YeuCauBaoGia[]> {
   const { data, error } = await db
     .from("quote_requests")
     .select("*")
@@ -120,14 +119,15 @@ export async function coYeuCauDaDuyet(email: string): Promise<boolean> {
  * Đổi trạng thái và trả về thông tin khách của yêu cầu đó.
  * Trả null nếu không đổi được — phía gọi cần tên/email để gửi webhook,
  * nên lấy luôn trong cùng một lượt thay vì truy vấn thêm.
+ *
+ * `db` là client của người đang đăng nhập: RLS chỉ cho admin sửa, nhân viên
+ * gọi vào thì không dòng nào bị đổi và hàm trả null.
  */
 export async function doiTrangThai(
+  db: SupabaseClient,
   id: string,
   trangThai: RequestStatus,
 ): Promise<{ id: string; tenKhach: string; email: string } | null> {
-  const db = getSupabaseAdmin();
-  if (!db) return null;
-
   const { data, error } = await db
     .from("quote_requests")
     .update({ trang_thai: trangThai })

@@ -1,6 +1,11 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
+
+// Chatbot (app/api/chat) ghi/đọc hội thoại bằng secret key — khách không đăng nhập.
+// Trang quản trị thì đọc/xoá bằng client của NHÂN SỰ đang đăng nhập (tham số
+// `db`), để RLS trong database quyết định ai được xem, ai được xoá.
 
 export interface StoredMessage {
   from: "bot" | "user";
@@ -130,10 +135,10 @@ export async function appendMessages(
 }
 
 /** Danh sách hội thoại kèm số tin nhắn, dùng cho trang /admin/conversations. */
-export async function listConversations(limit = 50): Promise<ConversationSummary[]> {
-  const db = getSupabaseAdmin();
-  if (!db) return [];
-
+export async function listConversations(
+  db: SupabaseClient,
+  limit = 50,
+): Promise<ConversationSummary[]> {
   const { data, error } = await db
     .from("conversations")
     .select("id, channel, created_at, last_message_at, messages(count)")
@@ -186,10 +191,10 @@ export async function listConversations(limit = 50): Promise<ConversationSummary
 }
 
 /** Một hội thoại kèm toàn bộ tin nhắn, dùng cho trang /admin/conversations/[id]. */
-export async function getConversationDetail(id: string): Promise<ConversationDetail | null> {
-  const db = getSupabaseAdmin();
-  if (!db) return null;
-
+export async function getConversationDetail(
+  db: SupabaseClient,
+  id: string,
+): Promise<ConversationDetail | null> {
   const { data: conv, error } = await db
     .from("conversations")
     .select("id, channel, created_at, last_message_at")
@@ -226,4 +231,19 @@ export async function getConversationDetail(id: string): Promise<ConversationDet
       createdAt: m.created_at as string,
     })),
   };
+}
+
+/**
+ * Xoá một hội thoại (tin nhắn và lead tự xoá theo nhờ ON DELETE CASCADE).
+ *
+ * RLS chặn không-phải-admin bằng cách lọc mất dòng chứ không báo lỗi, nên phải
+ * đếm số dòng thực sự bị xoá: 0 nghĩa là không có quyền hoặc không tồn tại.
+ */
+export async function xoaHoiThoai(db: SupabaseClient, id: string): Promise<boolean> {
+  const { data, error } = await db.from("conversations").delete().eq("id", id).select("id");
+  if (error) {
+    console.error("[conversations] Không xoá được hội thoại:", error.code, error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
 }

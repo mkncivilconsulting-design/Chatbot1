@@ -167,3 +167,11 @@ export async function dangXuat() {
   }
   redirect("/login?da_dang_xuat=1");
 }
+
+export async function dangXuatQuanTri() {
+  if (daCauHinhAuth()) {
+    const supabase = await taoClientAuth();
+    await supabase.auth.signOut();
+  }
+  redirect("/dang-nhap-quan-tri?da_dang_xuat=1");
+}
