@@ -1,4 +1,5 @@
 import { AdminSidebar, AdminMobileNav } from "@/components/admin/sidebar";
+import { ThanhTaiKhoan } from "@/components/admin/thanh-tai-khoan";
 import { batBuocQuanTri } from "@/lib/dal";
 
 // Mọi trang /admin cần đăng nhập với vai trò admin hoặc nhan_vien. Layout chặn
@@ -14,6 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <AdminSidebar taiKhoan={thongTin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <AdminMobileNav taiKhoan={thongTin} />
+        <ThanhTaiKhoan taiKhoan={thongTin} />
         <main className="flex-1 px-6 py-8 md:px-10 md:py-10">{children}</main>
       </div>
     </div>

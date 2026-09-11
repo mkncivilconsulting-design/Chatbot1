@@ -6,7 +6,6 @@ import {
   FileClock,
   KeyRound,
   LayoutDashboard,
-  LogOut,
   MessageSquare,
   School,
   Users,
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
-import { dangXuatQuanTri } from "@/app/login/actions";
 
 type VaiTro = "admin" | "nhan_vien";
 
@@ -97,24 +95,8 @@ export function AdminSidebar({ taiKhoan }: { taiKhoan: ThongTinTaiKhoan }) {
         })}
       </nav>
 
-      <div className="space-y-1 border-t p-3">
-        <div className="px-3 py-2">
-          <p className="truncate text-sm font-medium" title={taiKhoan.email ?? undefined}>
-            {taiKhoan.email}
-          </p>
-          <div className="mt-1">
-            <HuyHieuVaiTro vaiTro={taiKhoan.vaiTro} />
-          </div>
-        </div>
-        <form action={dangXuatQuanTri}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/70 duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          >
-            <LogOut className="size-4.5 shrink-0" />
-            Đăng xuất
-          </button>
-        </form>
+      {/* Email, vai trò và nút đăng xuất nằm ở thanh tài khoản đầu trang (ThanhTaiKhoan). */}
+      <div className="border-t p-3">
         <Link
           href="/"
           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/70 duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -150,18 +132,6 @@ export function AdminMobileNav({ taiKhoan }: { taiKhoan: ThongTinTaiKhoan }) {
           </Link>
         );
       })}
-      <span className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-        <HuyHieuVaiTro vaiTro={taiKhoan.vaiTro} />
-        <form action={dangXuatQuanTri}>
-          <button
-            type="submit"
-            aria-label="Đăng xuất"
-            className="flex size-7 items-center justify-center rounded-full text-sidebar-foreground/70 hover:bg-sidebar-accent"
-          >
-            <LogOut className="size-3.5" />
-          </button>
-        </form>
-      </span>
     </nav>
   );
 }
