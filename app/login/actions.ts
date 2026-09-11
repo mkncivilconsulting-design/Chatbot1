@@ -122,6 +122,44 @@ export async function taoTaiKhoan(formData: FormData): Promise<KetQuaDangNhap> {
   redirect(duongDanQuayVeAnToan(formData.get("next")));
 }
 
+/**
+ * Đặt / đổi mật khẩu cho tài khoản ĐANG đăng nhập. Phiên đăng nhập hiện tại
+ * chính là bằng chứng quyền sở hữu, nên không cần gửi email. Tài khoản tạo từ
+ * thời đăng nhập bằng magic link cũng dùng chỗ này để đặt mật khẩu lần đầu.
+ */
+export async function doiMatKhau(formData: FormData): Promise<KetQuaDangNhap> {
+  if (!daCauHinhAuth()) return { ok: false, loi: CHUA_CAU_HINH };
+
+  const supabase = await taoClientAuth();
+  const { data: phien } = await supabase.auth.getUser();
+  if (!phien.user) {
+    return { ok: false, loi: "Phiên đăng nhập đã hết. Bạn tải lại trang và đăng nhập lại nhé." };
+  }
+
+  const matKhau = String(formData.get("matKhau") ?? "");
+  const nhapLai = String(formData.get("nhapLai") ?? "");
+  if (matKhau.length < MAT_KHAU_TOI_THIEU) {
+    return { ok: false, loi: `Mật khẩu cần ít nhất ${MAT_KHAU_TOI_THIEU} ký tự.` };
+  }
+  if (new TextEncoder().encode(matKhau).length > MAT_KHAU_TOI_DA_BYTE) {
+    return { ok: false, loi: "Mật khẩu quá dài, bạn chọn mật khẩu ngắn hơn nhé." };
+  }
+  if (matKhau !== nhapLai) return { ok: false, loi: "Hai lần nhập mật khẩu chưa khớp nhau." };
+
+  const { error } = await supabase.auth.updateUser({ password: matKhau });
+  if (error) {
+    console.error("[login] updateUser lỗi:", error.status, error.code);
+    if (error.code === "same_password") {
+      return { ok: false, loi: "Mật khẩu mới trùng mật khẩu hiện tại." };
+    }
+    if (error.code === "weak_password") {
+      return { ok: false, loi: "Mật khẩu quá dễ đoán, bạn chọn mật khẩu khác nhé." };
+    }
+    return { ok: false, loi: loiQuaNhieuLan(error.status) ?? "Chưa đổi được mật khẩu. Bạn thử lại nhé." };
+  }
+  return { ok: true };
+}
+
 export async function dangXuat() {
   if (daCauHinhAuth()) {
     const supabase = await taoClientAuth();

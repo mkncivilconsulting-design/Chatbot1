@@ -1,7 +1,18 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
+
+// HAI LOẠI CLIENT, HAI VIỆC KHÁC NHAU:
+//
+// - ĐỌC hồ sơ cho học viên xem → dùng client của chính người đăng nhập
+//   (taoClientAuth trong lib/supabase-auth.ts). Truy vấn chạy dưới role
+//   `authenticated`, nên RLS của database tự lọc: dù code có truyền nhầm id hồ
+//   sơ của người khác, database cũng trả về rỗng.
+// - GHI (tạo hồ sơ, lưu giấy tờ, kết quả trích xuất) → secret key. Role
+//   `authenticated` cố ý không có quyền ghi, để học viên không tự sửa điểm hay
+//   tự đánh dấu giấy tờ hợp lệ.
 import type { DuLieuTrichXuat, LoaiGiayTo } from "@/lib/document-extraction";
 import type { DocStatus } from "@/lib/mock-data";
 
@@ -35,17 +46,60 @@ export async function docMaHoSoCu(): Promise<string | null> {
 }
 
 /**
- * Hồ sơ của tài khoản đang đăng nhập.
+ * Id hồ sơ của người đang đăng nhập — ĐỌC QUA RLS.
+ *
+ * `dbNguoiDung` là client của chính người đó (taoClientAuth). Điều kiện
+ * `user_id` ở đây chỉ để Postgres dùng index; thứ thật sự chặn là policy RLS
+ * "hoc vien chi xem ho so cua minh".
+ */
+export async function timHoSoCuaToi(
+  dbNguoiDung: SupabaseClient,
+  userId: string,
+): Promise<string | null> {
+  const { data, error } = await dbNguoiDung
+    .from("student_profiles")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[student-profile] Không đọc được hồ sơ:", error.message);
+    return null;
+  }
+  return (data?.id as string | undefined) ?? null;
+}
+
+/**
+ * Nhận hồ sơ ẩn danh cũ (từ trước khi có đăng nhập) về tài khoản này, nếu hồ sơ
+ * đó chưa thuộc về ai. Trả về id hồ sơ đã nhận, hoặc null.
+ *
+ * Điều kiện user_id is null nằm ngay trong câu UPDATE, nên hai tài khoản không
+ * thể cùng nhận một hồ sơ cũ.
+ */
+export async function nhanHoSoCu(userId: string, maHoSoCu: string | null): Promise<string | null> {
+  const db = getSupabaseAdmin();
+  if (!db || !laMaHoSoHopLe(maHoSoCu)) return null;
+
+  const { data } = await db
+    .from("student_profiles")
+    .update({ user_id: userId, updated_at: new Date().toISOString() })
+    .eq("id", maHoSoCu)
+    .is("user_id", null)
+    .select("id")
+    .maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
+/**
+ * Hồ sơ để GHI dữ liệu vào (dùng trong Server Action nộp giấy tờ).
  *
  * - Đã có hồ sơ gắn với tài khoản → trả về luôn.
- * - Chưa có, nhưng trình duyệt còn cookie hồ sơ ẩn danh từ trước khi có đăng
- *   nhập (`maHoSoCu`) và hồ sơ đó chưa thuộc về ai → nhận luôn hồ sơ đó, để giấy
- *   tờ học viên đã nộp trước kia không bị mất.
- * - Vẫn chưa có và `taoMoi` = true → tạo hồ sơ mới. Trang xem thì để false, chỉ
- *   tạo khi học viên thực sự nộp giấy tờ.
+ * - Chưa có → nhận hồ sơ ẩn danh cũ nếu có (xem nhanHoSoCu).
+ * - Vẫn chưa có và `taoMoi` = true → tạo hồ sơ mới.
  *
- * `userId` PHẢI lấy từ lib/dal.ts (đã xác thực với Supabase), không bao giờ lấy
- * từ dữ liệu trình duyệt gửi lên.
+ * Chạy bằng secret key vì có thể phải tạo/cập nhật hồ sơ. `userId` PHẢI lấy từ
+ * lib/dal.ts (đã xác thực với Supabase), không bao giờ lấy từ dữ liệu trình
+ * duyệt gửi lên.
  */
 export async function layHoSoCuaNguoiDung(
   userId: string,
@@ -66,18 +120,8 @@ export async function layHoSoCuaNguoiDung(
   }
   if (coSan) return coSan.id as string;
 
-  if (laMaHoSoHopLe(maHoSoCu)) {
-    // Điều kiện user_id is null nằm ngay trong câu UPDATE, nên hai tài khoản
-    // không thể cùng nhận một hồ sơ cũ.
-    const { data: daNhan } = await db
-      .from("student_profiles")
-      .update({ user_id: userId, updated_at: new Date().toISOString() })
-      .eq("id", maHoSoCu)
-      .is("user_id", null)
-      .select("id")
-      .maybeSingle();
-    if (daNhan) return daNhan.id as string;
-  }
+  const daNhan = await nhanHoSoCu(userId, maHoSoCu);
+  if (daNhan) return daNhan;
 
   if (!taoMoi) return null;
 
@@ -94,11 +138,15 @@ export async function layHoSoCuaNguoiDung(
   return moi.id as string;
 }
 
-export async function docGiayTo(profileId: string): Promise<GiayToDaNop[]> {
-  const db = getSupabaseAdmin();
-  if (!db) return [];
-
-  const { data, error } = await db
+/**
+ * Giấy tờ của một hồ sơ — ĐỌC QUA RLS bằng client của người đang đăng nhập.
+ * Truyền id hồ sơ của người khác vào đây thì chỉ nhận về mảng rỗng.
+ */
+export async function docGiayTo(
+  dbNguoiDung: SupabaseClient,
+  profileId: string,
+): Promise<GiayToDaNop[]> {
+  const { data, error } = await dbNguoiDung
     .from("student_documents")
     .select("loai, ten_file, mime, kich_thuoc, trang_thai, ly_do, trich_xuat, tai_len_luc")
     .eq("profile_id", profileId);

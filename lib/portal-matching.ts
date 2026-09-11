@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { docGiayTo } from "@/lib/student-profile";
 import { listSchools, type SchoolRow } from "@/lib/schools-db";
 import type { TrichXuatBangDiem, TrichXuatIelts } from "@/lib/document-extraction";
@@ -20,9 +21,15 @@ export interface KetQuaDoiChieu {
  * Dùng chung cho trang /portal và cho Server Action gợi ý học bổng — action
  * KHÔNG nhận điểm hay danh sách trường từ client mà tự tính lại ở đây, để khách
  * không thể tự khai điểm cao rồi đòi gợi ý học bổng.
+ *
+ * `dbNguoiDung` là client của người đang đăng nhập: điểm được đọc qua RLS nên
+ * chỉ có thể là điểm trong hồ sơ của chính họ.
  */
-export async function doiChieuHoSo(profileId: string): Promise<KetQuaDoiChieu> {
-  const giayTo = await docGiayTo(profileId);
+export async function doiChieuHoSo(
+  dbNguoiDung: SupabaseClient,
+  profileId: string,
+): Promise<KetQuaDoiChieu> {
+  const giayTo = await docGiayTo(dbNguoiDung, profileId);
   const bd = giayTo.find((g) => g.loai === "bang_diem")?.trichXuat as
     | TrichXuatBangDiem
     | null

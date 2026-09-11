@@ -4,13 +4,16 @@ import { UploadGiayTo } from "@/components/portal/upload-giay-to";
 import { ThongTinTrichXuat } from "@/components/portal/thong-tin-trich-xuat";
 import { SchoolMatch } from "@/components/portal/school-match";
 import { GoiYHocBong } from "@/components/portal/goi-y-hoc-bong";
+import { DoiMatKhau } from "@/components/portal/doi-mat-khau";
 import { Button } from "@/components/ui/button";
 import { dangXuat } from "@/app/login/actions";
 import { batBuocDangNhap } from "@/lib/dal";
+import { taoClientAuth } from "@/lib/supabase-auth";
 import {
   docGiayTo,
   docMaHoSoCu,
-  layHoSoCuaNguoiDung,
+  nhanHoSoCu,
+  timHoSoCuaToi,
   type GiayToDaNop,
 } from "@/lib/student-profile";
 import { doiChieuHoSo } from "@/lib/portal-matching";
@@ -22,15 +25,26 @@ import type { TrichXuatBangDiem, TrichXuatGiayTo } from "@/lib/document-extracti
 export const dynamic = "force-dynamic";
 
 export default async function PortalPage() {
-  // Kiểm tra thật nằm ở đây (qua lib/dal.ts), không chỉ dựa vào proxy.ts.
+  // Chưa đăng nhập → chuyển sang /login. Kiểm tra thật nằm ở đây (qua
+  // lib/dal.ts), không chỉ dựa vào proxy.ts.
   const nguoiDung = await batBuocDangNhap("/portal");
 
   const configured = isSupabaseConfigured();
-  // Chỉ xem thì không tạo hồ sơ mới; hồ sơ được tạo khi nộp giấy tờ đầu tiên.
-  const profileId = configured
-    ? await layHoSoCuaNguoiDung(nguoiDung.id, { maHoSoCu: await docMaHoSoCu() })
-    : null;
-  const giayTo = profileId ? await docGiayTo(profileId) : [];
+
+  // Mọi dữ liệu hồ sơ trên trang này được đọc bằng client CỦA NGƯỜI ĐĂNG NHẬP,
+  // không phải secret key — nên RLS trong database quyết định họ thấy được gì,
+  // và họ chỉ thấy được hồ sơ của chính mình.
+  const db = await taoClientAuth();
+
+  let profileId = configured ? await timHoSoCuaToi(db, nguoiDung.id) : null;
+  if (configured && !profileId) {
+    // Chưa có hồ sơ: thử nhận hồ sơ ẩn danh cũ trên trình duyệt này (nếu có),
+    // rồi đọc lại qua RLS. Chỉ xem thì không tạo hồ sơ mới.
+    if (await nhanHoSoCu(nguoiDung.id, await docMaHoSoCu())) {
+      profileId = await timHoSoCuaToi(db, nguoiDung.id);
+    }
+  }
+  const giayTo = profileId ? await docGiayTo(db, profileId) : [];
 
   const tim = (loai: GiayToDaNop["loai"]) => giayTo.find((g) => g.loai === loai) ?? null;
   const bangDiem = tim("bang_diem");
@@ -46,12 +60,12 @@ export default async function PortalPage() {
   // Đối chiếu điểm chuẩn dùng chung một hàm với Server Action gợi ý học bổng,
   // để hai bên không bao giờ tính ra kết quả khác nhau.
   const ketDoiChieu = profileId
-    ? await doiChieuHoSo(profileId)
+    ? await doiChieuHoSo(db, profileId)
     : { gpa: null, ielts: null, daDuDiem: false, doiChieu: [], truongDat: [] };
   const { gpa, ielts: bandIelts, daDuDiem, doiChieu, truongDat } = ketDoiChieu;
   const soTruongDat = truongDat.length;
 
-  const goiY = profileId ? await docGoiY(profileId) : null;
+  const goiY = profileId ? await docGoiY(db, profileId) : null;
 
   return (
     <>
@@ -136,6 +150,10 @@ export default async function PortalPage() {
               Nộp cả bảng điểm và chứng chỉ IELTS để hệ thống đối chiếu điểm chuẩn giúp bạn.
             </p>
           )}
+        </section>
+
+        <section className="mt-12">
+          <DoiMatKhau />
         </section>
       </main>
       <SiteFooter />

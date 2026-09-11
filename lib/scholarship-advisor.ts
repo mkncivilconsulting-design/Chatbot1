@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 
 // Dùng `||` chứ không phải `??`: GEMINI_MODEL= (rỗng) trong .env phải rơi về mặc định.
@@ -211,11 +212,12 @@ export interface GoiYDaLuu {
   soTruong: number;
 }
 
-export async function docGoiY(profileId: string): Promise<GoiYDaLuu | null> {
-  const db = getSupabaseAdmin();
-  if (!db) return null;
-
-  const { data, error } = await db
+/** Gợi ý đã lưu — ĐỌC QUA RLS bằng client của người đang đăng nhập. */
+export async function docGoiY(
+  dbNguoiDung: SupabaseClient,
+  profileId: string,
+): Promise<GoiYDaLuu | null> {
+  const { data, error } = await dbNguoiDung
     .from("student_profiles")
     .select("goi_y_hoc_bong, goi_y_luc, goi_y_so_truong")
     .eq("id", profileId)

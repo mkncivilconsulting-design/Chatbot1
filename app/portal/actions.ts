@@ -10,8 +10,15 @@ import {
   trichXuatGiayTo,
   type LoaiGiayTo,
 } from "@/lib/document-extraction";
-import { docMaHoSoCu, layHoSoCuaNguoiDung, luuFileGoc, luuGiayTo } from "@/lib/student-profile";
+import {
+  docMaHoSoCu,
+  layHoSoCuaNguoiDung,
+  luuFileGoc,
+  luuGiayTo,
+  timHoSoCuaToi,
+} from "@/lib/student-profile";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
+import { taoClientAuth } from "@/lib/supabase-auth";
 import { layNguoiDung } from "@/lib/dal";
 import { doiChieuHoSo } from "@/lib/portal-matching";
 import { goiYHocBong, luuGoiY } from "@/lib/scholarship-advisor";
@@ -127,12 +134,14 @@ export async function timHocBongPhuHop(): Promise<KetQuaGoiY> {
   const nguoiDung = await layNguoiDung();
   if (!nguoiDung) return { ok: false, loi: HET_PHIEN };
 
-  const profileId = await layHoSoCuaNguoiDung(nguoiDung.id);
+  // Đọc hồ sơ và điểm qua RLS bằng client của chính người đăng nhập.
+  const db = await taoClientAuth();
+  const profileId = await timHoSoCuaToi(db, nguoiDung.id);
   if (!profileId) {
     return { ok: false, loi: "Chưa có hồ sơ. Bạn nộp giấy tờ trước nhé." };
   }
 
-  const ket = await doiChieuHoSo(profileId);
+  const ket = await doiChieuHoSo(db, profileId);
   if (!ket.daDuDiem) {
     return { ok: false, loi: "Cần nộp cả bảng điểm và chứng chỉ IELTS trước đã bạn nhé." };
   }
