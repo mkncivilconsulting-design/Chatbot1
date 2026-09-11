@@ -3,20 +3,33 @@ import { SiteFooter } from "@/components/site-footer";
 import { UploadGiayTo } from "@/components/portal/upload-giay-to";
 import { ThongTinTrichXuat } from "@/components/portal/thong-tin-trich-xuat";
 import { SchoolMatch } from "@/components/portal/school-match";
-import { docMaHoSo } from "@/app/portal/actions";
 import { GoiYHocBong } from "@/components/portal/goi-y-hoc-bong";
-import { docGiayTo, type GiayToDaNop } from "@/lib/student-profile";
+import { Button } from "@/components/ui/button";
+import { dangXuat } from "@/app/login/actions";
+import { batBuocDangNhap } from "@/lib/dal";
+import {
+  docGiayTo,
+  docMaHoSoCu,
+  layHoSoCuaNguoiDung,
+  type GiayToDaNop,
+} from "@/lib/student-profile";
 import { doiChieuHoSo } from "@/lib/portal-matching";
 import { docGoiY } from "@/lib/scholarship-advisor";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
 import type { TrichXuatBangDiem, TrichXuatGiayTo } from "@/lib/document-extraction";
 
-// Đọc cookie + database theo từng request, không prerender.
+// Đọc phiên đăng nhập + database theo từng request, không prerender.
 export const dynamic = "force-dynamic";
 
 export default async function PortalPage() {
+  // Kiểm tra thật nằm ở đây (qua lib/dal.ts), không chỉ dựa vào proxy.ts.
+  const nguoiDung = await batBuocDangNhap("/portal");
+
   const configured = isSupabaseConfigured();
-  const profileId = configured ? await docMaHoSo() : null;
+  // Chỉ xem thì không tạo hồ sơ mới; hồ sơ được tạo khi nộp giấy tờ đầu tiên.
+  const profileId = configured
+    ? await layHoSoCuaNguoiDung(nguoiDung.id, { maHoSoCu: await docMaHoSoCu() })
+    : null;
   const giayTo = profileId ? await docGiayTo(profileId) : [];
 
   const tim = (loai: GiayToDaNop["loai"]) => giayTo.find((g) => g.loai === loai) ?? null;
@@ -44,9 +57,19 @@ export default async function PortalPage() {
     <>
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-6 pb-24 pt-32">
-        <div className="border-b pb-6">
-          <p className="text-sm text-muted-foreground">Xin chào,</p>
-          <h1 className="text-2xl font-medium tracking-tight">{hoTen ?? "bạn"}</h1>
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-6">
+          <div>
+            <p className="text-sm text-muted-foreground">Xin chào,</p>
+            <h1 className="text-2xl font-medium tracking-tight">{hoTen ?? "bạn"}</h1>
+            {nguoiDung.email && (
+              <p className="mt-1 text-sm text-muted-foreground">{nguoiDung.email}</p>
+            )}
+          </div>
+          <form action={dangXuat}>
+            <Button type="submit" variant="outline" size="sm">
+              Đăng xuất
+            </Button>
+          </form>
         </div>
 
         <section className="mt-10">

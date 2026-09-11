@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cookies } from "next/headers";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import type { DuLieuTrichXuat, LoaiGiayTo } from "@/lib/document-extraction";
 import type { DocStatus } from "@/lib/mock-data";
@@ -23,38 +24,74 @@ export function laMaHoSoHopLe(id: unknown): id is string {
   return typeof id === "string" && UUID_RE.test(id);
 }
 
-export async function taoHoSo(): Promise<string | null> {
+// Cookie hồ sơ ẩn danh từ trước khi có đăng nhập. Không còn cấp quyền gì — chỉ
+// dùng một lần để tài khoản mới nhận lại hồ sơ cũ (xem layHoSoCuaNguoiDung).
+const COOKIE_HO_SO_CU = "duhoc24_sid";
+
+export async function docMaHoSoCu(): Promise<string | null> {
+  const store = await cookies();
+  const raw = store.get(COOKIE_HO_SO_CU)?.value;
+  return laMaHoSoHopLe(raw) ? raw : null;
+}
+
+/**
+ * Hồ sơ của tài khoản đang đăng nhập.
+ *
+ * - Đã có hồ sơ gắn với tài khoản → trả về luôn.
+ * - Chưa có, nhưng trình duyệt còn cookie hồ sơ ẩn danh từ trước khi có đăng
+ *   nhập (`maHoSoCu`) và hồ sơ đó chưa thuộc về ai → nhận luôn hồ sơ đó, để giấy
+ *   tờ học viên đã nộp trước kia không bị mất.
+ * - Vẫn chưa có và `taoMoi` = true → tạo hồ sơ mới. Trang xem thì để false, chỉ
+ *   tạo khi học viên thực sự nộp giấy tờ.
+ *
+ * `userId` PHẢI lấy từ lib/dal.ts (đã xác thực với Supabase), không bao giờ lấy
+ * từ dữ liệu trình duyệt gửi lên.
+ */
+export async function layHoSoCuaNguoiDung(
+  userId: string,
+  { maHoSoCu = null, taoMoi = false }: { maHoSoCu?: string | null; taoMoi?: boolean } = {},
+): Promise<string | null> {
   const db = getSupabaseAdmin();
   if (!db) return null;
 
-  const { data, error } = await db
-    .from("student_profiles")
-    .insert({})
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("[student-profile] Không tạo được hồ sơ:", error.message);
-    return null;
-  }
-  return data.id as string;
-}
-
-export async function hoSoTonTai(id: string): Promise<boolean> {
-  const db = getSupabaseAdmin();
-  if (!db) return false;
-
-  const { data, error } = await db
+  const { data: coSan, error } = await db
     .from("student_profiles")
     .select("id")
-    .eq("id", id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error) {
-    console.error("[student-profile] Không kiểm tra được hồ sơ:", error.message);
-    return false;
+    console.error("[student-profile] Không đọc được hồ sơ:", error.message);
+    return null;
   }
-  return Boolean(data);
+  if (coSan) return coSan.id as string;
+
+  if (laMaHoSoHopLe(maHoSoCu)) {
+    // Điều kiện user_id is null nằm ngay trong câu UPDATE, nên hai tài khoản
+    // không thể cùng nhận một hồ sơ cũ.
+    const { data: daNhan } = await db
+      .from("student_profiles")
+      .update({ user_id: userId, updated_at: new Date().toISOString() })
+      .eq("id", maHoSoCu)
+      .is("user_id", null)
+      .select("id")
+      .maybeSingle();
+    if (daNhan) return daNhan.id as string;
+  }
+
+  if (!taoMoi) return null;
+
+  const { data: moi, error: loiTao } = await db
+    .from("student_profiles")
+    .insert({ user_id: userId })
+    .select("id")
+    .single();
+
+  if (loiTao) {
+    console.error("[student-profile] Không tạo được hồ sơ:", loiTao.message);
+    return null;
+  }
+  return moi.id as string;
 }
 
 export async function docGiayTo(profileId: string): Promise<GiayToDaNop[]> {

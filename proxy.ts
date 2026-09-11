@@ -1,22 +1,25 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { daCauHinhMatKhau, kiemTraBasicAuth } from "@/lib/admin-auth";
 
 // Ở Next.js 16, file này tên `proxy.ts` — `middleware.ts` đã bị deprecated.
 //
-// MỤC ĐÍCH: chặn tạm /admin/* cho tới khi có đăng nhập thật ở Tuần 6.
-// Trang admin hiển thị hội thoại và thông tin cá nhân của khách. Đây là hàng rào
-// tạm, KHÔNG phải hệ thống xác thực:
-// - chỉ một mật khẩu dùng chung, không phân biệt người dùng
-// - không có phiên đăng nhập, không log ai đã xem gì
-// Tuần 6 sẽ thay bằng Supabase Auth + RLS, lúc đó xoá file này.
+// Hai việc, tách theo đường dẫn:
 //
-// Server Action gọi từ trang admin cũng POST về chính URL /admin/... nên đi qua
-// đây. Dù vậy các action vẫn tự kiểm tra lại quyền — phòng khi matcher đổi.
+// 1) /portal/* — làm mới phiên đăng nhập Supabase (magic link) và chuyển khách
+//    chưa đăng nhập về /login. Đây chỉ là lớp chặn "lạc quan" cho nhanh; trang
+//    và Server Action của /portal vẫn tự kiểm tra lại qua lib/dal.ts.
+//
+// 2) /admin/* — hàng rào Basic Auth tạm, KHÔNG phải hệ thống xác thực:
+//    - chỉ một mật khẩu dùng chung, không phân biệt người dùng
+//    - không có phiên đăng nhập, không log ai đã xem gì
+//    Server Action gọi từ trang admin cũng POST về chính URL /admin/... nên đi
+//    qua đây. Dù vậy các action vẫn tự kiểm tra lại quyền — phòng khi matcher đổi.
 
 export const config = {
-  // Liệt kê cả "/admin" lẫn "/admin/..." để trang gốc cũng bị chặn.
-  matcher: ["/admin", "/admin/:path*"],
+  // Liệt kê cả trang gốc lẫn "/.../..." để trang gốc cũng đi qua proxy.
+  matcher: ["/admin", "/admin/:path*", "/portal", "/portal/:path*"],
 };
 
 function yeuCauDangNhap() {
@@ -28,7 +31,56 @@ function yeuCauDangNhap() {
   });
 }
 
-export function proxy(request: NextRequest) {
+async function chanCongHoSo(request: NextRequest) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+  // Thiếu cấu hình thì để trang tự xử lý (nó sẽ chuyển về /login và báo lỗi).
+  if (!url || !key) return NextResponse.next();
+
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(url, key, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet, headers) {
+        // Token vừa được làm mới: ghi vào request để trang render phía sau đọc
+        // được ngay, và vào response để trình duyệt lưu lại.
+        for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
+        response = NextResponse.next({ request });
+        for (const { name, value, options } of cookiesToSet) {
+          response.cookies.set(name, value, options);
+        }
+        // Header chống cache đi kèm cookie phiên — bắt buộc theo tài liệu @supabase/ssr.
+        for (const [k, v] of Object.entries(headers)) response.headers.set(k, v);
+      },
+    },
+  });
+
+  // Đừng chèn code nào giữa createServerClient và getUser() — lệnh này mới là
+  // chỗ làm mới token.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Chỉ chuyển hướng khi khách MỞ trang (GET). Server Action là POST: để nó tự
+  // trả thông báo "hết phiên", thay vì nhận về HTML trang đăng nhập rồi vỡ.
+  if (!user && (request.method === "GET" || request.method === "HEAD")) {
+    const dich = new URL("/login", request.nextUrl.origin);
+    dich.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
+    return NextResponse.redirect(dich);
+  }
+
+  return response;
+}
+
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (pathname === "/portal" || pathname.startsWith("/portal/")) {
+    return chanCongHoSo(request);
+  }
+
   // Thiếu cấu hình thì KHOÁ luôn, không mở cửa. Thà admin vào không được
   // còn hơn vô tình để lộ dữ liệu của khách.
   if (!daCauHinhMatKhau()) {

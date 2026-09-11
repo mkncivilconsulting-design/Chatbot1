@@ -1,6 +1,5 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import {
   KICH_THUOC_TOI_DA,
@@ -11,45 +10,23 @@ import {
   trichXuatGiayTo,
   type LoaiGiayTo,
 } from "@/lib/document-extraction";
-import {
-  hoSoTonTai,
-  laMaHoSoHopLe,
-  luuFileGoc,
-  luuGiayTo,
-  taoHoSo,
-} from "@/lib/student-profile";
+import { docMaHoSoCu, layHoSoCuaNguoiDung, luuFileGoc, luuGiayTo } from "@/lib/student-profile";
 import { isSupabaseConfigured } from "@/lib/supabase-server";
+import { layNguoiDung } from "@/lib/dal";
 import { doiChieuHoSo } from "@/lib/portal-matching";
 import { goiYHocBong, luuGoiY } from "@/lib/scholarship-advisor";
 
-// Cookie chỉ chứa id hồ sơ (UUID). httpOnly nên JavaScript trong trình duyệt
-// không đọc được, và bản thân id cũng không cấp quyền gì — mọi truy vấn vẫn
-// chạy phía server bằng secret key.
-const COOKIE_NAME = "duhoc24_sid";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 90; // 90 ngày
+// Mọi export trong file "use server" đều thành endpoint gọi được từ trình duyệt,
+// nên file này CHỈ export các action — và action nào cũng tự kiểm tra đăng nhập,
+// không dựa vào việc proxy.ts đã chặn /portal (tài liệu Next.js dặn đúng như vậy).
 
 const LOAI_HOP_LE: LoaiGiayTo[] = ["bang_diem", "ielts", "giay_to_tuy_than"];
+
+const HET_PHIEN = "Phiên đăng nhập đã hết. Bạn tải lại trang và đăng nhập lại nhé.";
 
 export interface KetQuaNop {
   ok: boolean;
   loi?: string;
-}
-
-export async function docMaHoSo(): Promise<string | null> {
-  const store = await cookies();
-  const raw = store.get(COOKIE_NAME)?.value;
-  return laMaHoSoHopLe(raw) ? raw : null;
-}
-
-async function ghiCookieHoSo(id: string) {
-  const store = await cookies();
-  store.set(COOKIE_NAME, id, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: COOKIE_MAX_AGE,
-  });
 }
 
 export async function napGiayTo(formData: FormData): Promise<KetQuaNop> {
@@ -57,6 +34,9 @@ export async function napGiayTo(formData: FormData): Promise<KetQuaNop> {
     console.error("[portal] Thiếu SUPABASE_URL hoặc SUPABASE_SECRET_KEY trong .env");
     return { ok: false, loi: "Hệ thống chưa được cấu hình. Vui lòng liên hệ quản trị viên." };
   }
+
+  const nguoiDung = await layNguoiDung();
+  if (!nguoiDung) return { ok: false, loi: HET_PHIEN };
 
   const loai = formData.get("loai");
   if (typeof loai !== "string" || !LOAI_HOP_LE.includes(loai as LoaiGiayTo)) {
@@ -77,15 +57,14 @@ export async function napGiayTo(formData: FormData): Promise<KetQuaNop> {
     return { ok: false, loi: `${TEN_LOAI[loaiGiayTo]} cần ${mong}.` };
   }
 
-  // Cookie có thể trỏ tới hồ sơ đã bị xoá — khi đó tạo hồ sơ mới.
-  let profileId = await docMaHoSo();
-  if (profileId && !(await hoSoTonTai(profileId))) profileId = null;
+  // Hồ sơ gắn với TÀI KHOẢN đã xác thực. Lần đầu nộp thì tạo mới (hoặc nhận lại
+  // hồ sơ ẩn danh cũ trên trình duyệt này, để giấy tờ đã nộp trước kia không mất).
+  const profileId = await layHoSoCuaNguoiDung(nguoiDung.id, {
+    maHoSoCu: await docMaHoSoCu(),
+    taoMoi: true,
+  });
   if (!profileId) {
-    profileId = await taoHoSo();
-    if (!profileId) {
-      return { ok: false, loi: "Không tạo được hồ sơ. Bạn thử lại giúp mình nhé." };
-    }
-    await ghiCookieHoSo(profileId);
+    return { ok: false, loi: "Không tạo được hồ sơ. Bạn thử lại giúp mình nhé." };
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -137,16 +116,19 @@ export interface KetQuaGoiY {
 /**
  * Nhờ Gemini tra cứu và gợi ý học bổng.
  *
- * Hàm này KHÔNG nhận điểm hay danh sách trường từ client — nó đọc hồ sơ theo
- * cookie rồi tự đối chiếu lại, để khách không thể tự khai điểm cao.
+ * Hàm này KHÔNG nhận điểm hay danh sách trường từ client — nó đọc hồ sơ của
+ * tài khoản đang đăng nhập rồi tự đối chiếu lại, để khách không thể tự khai điểm cao.
  */
 export async function timHocBongPhuHop(): Promise<KetQuaGoiY> {
   if (!isSupabaseConfigured()) {
     return { ok: false, loi: "Hệ thống chưa được cấu hình. Vui lòng liên hệ quản trị viên." };
   }
 
-  const profileId = await docMaHoSo();
-  if (!profileId || !(await hoSoTonTai(profileId))) {
+  const nguoiDung = await layNguoiDung();
+  if (!nguoiDung) return { ok: false, loi: HET_PHIEN };
+
+  const profileId = await layHoSoCuaNguoiDung(nguoiDung.id);
+  if (!profileId) {
     return { ok: false, loi: "Chưa có hồ sơ. Bạn nộp giấy tờ trước nhé." };
   }
 

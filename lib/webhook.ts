@@ -10,12 +10,16 @@ const URL_WEBHOOK_DUYET = process.env.MAKE_APPROVAL_WEBHOOK_URL;
 const HAN_CHO_MS = 5000;
 
 /**
- * Link đăng nhập gửi cho khách sau khi yêu cầu được duyệt.
+ * Link đăng nhập gửi cho khách sau khi yêu cầu được duyệt — trỏ tới trang
+ * đăng nhập magic link /login (app/login/page.tsx).
  *
  * Đọc từ LOGIN_URL; không có thì tự ghép từ NEXT_PUBLIC_SITE_URL + "/login".
- * Nhờ vậy khi có trang đăng nhập thật, chỉ cần đổi giá trị biến môi trường —
- * KHÔNG phải sửa code, cũng KHÔNG phải đụng gì tới kịch bản Make, vì tên trường
- * trong payload (`linkDangNhap`) giữ nguyên.
+ * Đổi tên miền thì chỉ cần đổi biến môi trường — KHÔNG phải sửa code, cũng
+ * KHÔNG phải đụng gì tới kịch bản Make, vì tên trường trong payload
+ * (`linkDangNhap`) giữ nguyên.
+ *
+ * Cố ý không gắn email của khách vào link (?email=...): URL hay bị ghi vào log
+ * máy chủ và lịch sử trình duyệt, không đáng đổi lấy việc đỡ gõ một ô.
  */
 export function layLinkDangNhap(): string {
   const rieng = process.env.LOGIN_URL?.trim();
