@@ -91,6 +91,32 @@ export async function danhSachYeuCau(limit = 100): Promise<YeuCauBaoGia[]> {
 }
 
 /**
+ * Email này đã có yêu cầu báo giá được admin duyệt chưa. Chỉ những email này
+ * mới được tạo tài khoản cổng hồ sơ.
+ *
+ * So sánh không phân biệt hoa thường. Dùng ilike nên phải thoát ký tự `%`, `_`
+ * và `\` — dấu gạch dưới rất hay có trong email, không thoát thì nó thành ký tự
+ * đại diện và khớp nhầm email khác.
+ */
+export async function coYeuCauDaDuyet(email: string): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  if (!db) return false;
+
+  const mau = email.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const { count, error } = await db
+    .from("quote_requests")
+    .select("id", { count: "exact", head: true })
+    .ilike("email", mau)
+    .eq("trang_thai", "da_duyet");
+
+  if (error) {
+    console.error("[quote-requests] Không kiểm tra được email:", error.message);
+    return false;
+  }
+  return (count ?? 0) > 0;
+}
+
+/**
  * Đổi trạng thái và trả về thông tin khách của yêu cầu đó.
  * Trả null nếu không đổi được — phía gọi cần tên/email để gửi webhook,
  * nên lấy luôn trong cùng một lượt thay vì truy vấn thêm.

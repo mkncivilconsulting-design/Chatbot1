@@ -1,77 +1,125 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { daCauHinhAuth, layDiaChiSite, taoClientAuth } from "@/lib/supabase-auth";
+import { daCauHinhAuth, taoClientAuth } from "@/lib/supabase-auth";
 import { duongDanQuayVeAnToan } from "@/lib/dal";
+import { getSupabaseAdmin } from "@/lib/supabase-server";
+import { coYeuCauDaDuyet } from "@/lib/quote-requests";
 import { thongTinLienHe } from "@/lib/qna";
+import { MAT_KHAU_TOI_DA_BYTE, MAT_KHAU_TOI_THIEU } from "@/lib/mat-khau";
 
-export interface KetQuaGuiLink {
+// Đăng nhập bằng email + mật khẩu qua Supabase Auth. Mật khẩu chỉ đi từ form
+// thẳng tới Supabase — không ghi log, không lưu ở đâu trong hệ thống của mình.
+
+export interface KetQuaDangNhap {
   ok: boolean;
   loi?: string;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/**
- * Gửi magic link tới email. Bấm link trong thư → /auth/callback → đăng nhập xong.
- *
- * Supabase tự tạo tài khoản cho email lần đầu đăng nhập, nên không có bước
- * đăng ký riêng. Không có mật khẩu nào đi qua đây.
- */
-export async function guiMagicLink(formData: FormData): Promise<KetQuaGuiLink> {
-  if (!daCauHinhAuth()) {
-    console.error("[login] Thiếu SUPABASE_URL hoặc SUPABASE_PUBLISHABLE_KEY trong .env");
-    return { ok: false, loi: "Chức năng đăng nhập chưa được cấu hình. Vui lòng liên hệ quản trị viên." };
-  }
+const CHUA_CAU_HINH = "Chức năng đăng nhập chưa được cấu hình. Vui lòng liên hệ quản trị viên.";
 
+function docEmail(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  if (!EMAIL_RE.test(email) || email.length > 254) {
-    return { ok: false, loi: "Email chưa đúng định dạng, bạn kiểm tra lại giúp mình nhé." };
-  }
+  return EMAIL_RE.test(email) && email.length <= 254 ? email : null;
+}
 
-  // `next` đi qua link trong email rồi quay lại callback — lọc ngay từ đầu để
-  // không ai dùng trang đăng nhập của mình làm bàn đạp chuyển hướng ra ngoài.
-  const next = duongDanQuayVeAnToan(formData.get("next"));
-  const emailRedirectTo = `${layDiaChiSite()}/auth/callback?next=${encodeURIComponent(next)}`;
+function loiQuaNhieuLan(status: number | undefined) {
+  return status === 429
+    ? "Bạn thử quá nhiều lần. Đợi vài phút rồi thử lại nhé."
+    : null;
+}
+
+export async function dangNhap(formData: FormData): Promise<KetQuaDangNhap> {
+  if (!daCauHinhAuth()) return { ok: false, loi: CHUA_CAU_HINH };
+
+  const email = docEmail(formData);
+  const matKhau = String(formData.get("matKhau") ?? "");
+  if (!email) return { ok: false, loi: "Email chưa đúng định dạng, bạn kiểm tra lại giúp mình nhé." };
+  if (!matKhau) return { ok: false, loi: "Bạn chưa nhập mật khẩu." };
 
   const supabase = await taoClientAuth();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo, shouldCreateUser: true },
-  });
+  const { error } = await supabase.auth.signInWithPassword({ email, password: matKhau });
 
   if (error) {
-    // Ghi lỗi thật vào log, còn khách chỉ thấy câu dễ hiểu.
-    console.error("[login] signInWithOtp lỗi:", error.status, error.code, error.message);
-
-    if (error.status === 429 || error.code === "over_email_send_rate_limit") {
-      // Supabase dùng chung mã lỗi cho hai giới hạn khác hẳn nhau:
-      // - từng email: phải cách nhau ~60 giây ("...only request this after 21 seconds")
-      // - cả dự án: tổng số email gửi mỗi giờ ("email rate limit exceeded") — với
-      //   SMTP mặc định của Supabase con số này rất thấp, cả site dùng chung.
-      const soGiay = error.message.match(/after (\d+) seconds?/)?.[1];
-      if (soGiay) {
-        return {
-          ok: false,
-          loi: `Bạn vừa yêu cầu link. Kiểm tra hộp thư (cả mục Spam), hoặc đợi ${soGiay} giây rồi gửi lại nhé.`,
-        };
-      }
-      return {
-        ok: false,
-        loi: `Hệ thống đang tạm hết lượt gửi email đăng nhập, không phải do bạn. Bạn thử lại sau khoảng một giờ, hoặc gọi ${thongTinLienHe.dienThoai} để được hỗ trợ nhé.`,
-      };
-    }
-    if (error.code === "email_address_not_authorized") {
-      // SMTP mặc định của Supabase chỉ gửi được tới email trong team dự án.
-      return {
-        ok: false,
-        loi: "Hệ thống email đang ở chế độ thử nghiệm nên chưa gửi được tới địa chỉ này. Vui lòng liên hệ trung tâm để được hỗ trợ.",
-      };
-    }
-    return { ok: false, loi: "Chưa gửi được link đăng nhập. Bạn thử lại sau ít phút nhé." };
+    // Chỉ log mã lỗi, không bao giờ log mật khẩu.
+    console.error("[login] signInWithPassword lỗi:", error.status, error.code);
+    return {
+      ok: false,
+      // Không nói rõ sai email hay sai mật khẩu, để người lạ không dò được
+      // email nào đã có tài khoản.
+      loi: loiQuaNhieuLan(error.status) ?? "Email hoặc mật khẩu không đúng.",
+    };
   }
 
-  return { ok: true };
+  redirect(duongDanQuayVeAnToan(formData.get("next")));
+}
+
+/**
+ * Tạo tài khoản cổng hồ sơ.
+ *
+ * Chỉ email đã có yêu cầu báo giá ĐƯỢC DUYỆT mới tạo được — cổng hồ sơ dành cho
+ * khách đã được mời, không phải ai ghé qua cũng mở tài khoản.
+ *
+ * Tài khoản được tạo phía server bằng secret key và đánh dấu sẵn là đã xác nhận
+ * email, nên không cần gửi thư xác nhận (SMTP mặc định của Supabase gửi được rất
+ * ít thư mỗi giờ). Đổi lại, hệ thống không kiểm chứng được người tạo tài khoản
+ * có thật sự sở hữu email đó — khi có SMTP riêng nên chuyển sang gửi thư xác nhận.
+ */
+export async function taoTaiKhoan(formData: FormData): Promise<KetQuaDangNhap> {
+  const admin = getSupabaseAdmin();
+  if (!daCauHinhAuth() || !admin) return { ok: false, loi: CHUA_CAU_HINH };
+
+  const email = docEmail(formData);
+  const matKhau = String(formData.get("matKhau") ?? "");
+  const nhapLai = String(formData.get("nhapLai") ?? "");
+
+  if (!email) return { ok: false, loi: "Email chưa đúng định dạng, bạn kiểm tra lại giúp mình nhé." };
+  if (matKhau.length < MAT_KHAU_TOI_THIEU) {
+    return { ok: false, loi: `Mật khẩu cần ít nhất ${MAT_KHAU_TOI_THIEU} ký tự.` };
+  }
+  if (new TextEncoder().encode(matKhau).length > MAT_KHAU_TOI_DA_BYTE) {
+    return { ok: false, loi: "Mật khẩu quá dài, bạn chọn mật khẩu ngắn hơn nhé." };
+  }
+  if (matKhau !== nhapLai) return { ok: false, loi: "Hai lần nhập mật khẩu chưa khớp nhau." };
+
+  if (!(await coYeuCauDaDuyet(email))) {
+    return {
+      ok: false,
+      loi: `Email này chưa có yêu cầu báo giá được duyệt. Bạn dùng đúng email đã gửi yêu cầu báo giá, hoặc gọi ${thongTinLienHe.dienThoai} để được hỗ trợ nhé.`,
+    };
+  }
+
+  const { error: loiTao } = await admin.auth.admin.createUser({
+    email,
+    password: matKhau,
+    email_confirm: true,
+  });
+
+  if (loiTao) {
+    console.error("[login] createUser lỗi:", loiTao.status, loiTao.code);
+    if (loiTao.code === "email_exists" || loiTao.status === 422) {
+      return {
+        ok: false,
+        loi: `Email này đã có tài khoản. Bạn chuyển sang "Đăng nhập", hoặc gọi ${thongTinLienHe.dienThoai} nếu quên mật khẩu nhé.`,
+      };
+    }
+    if (loiTao.code === "weak_password") {
+      return { ok: false, loi: "Mật khẩu quá dễ đoán, bạn chọn mật khẩu khác nhé." };
+    }
+    return { ok: false, loi: "Chưa tạo được tài khoản. Bạn thử lại sau ít phút nhé." };
+  }
+
+  // Tạo xong thì đăng nhập luôn, khỏi bắt khách gõ lại.
+  const supabase = await taoClientAuth();
+  const { error: loiDangNhap } = await supabase.auth.signInWithPassword({ email, password: matKhau });
+  if (loiDangNhap) {
+    console.error("[login] Đăng nhập sau khi tạo tài khoản lỗi:", loiDangNhap.status, loiDangNhap.code);
+    return { ok: false, loi: 'Đã tạo tài khoản. Bạn chuyển sang "Đăng nhập" để vào cổng hồ sơ nhé.' };
+  }
+
+  redirect(duongDanQuayVeAnToan(formData.get("next")));
 }
 
 export async function dangXuat() {

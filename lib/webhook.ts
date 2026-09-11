@@ -11,7 +11,7 @@ const HAN_CHO_MS = 5000;
 
 /**
  * Link đăng nhập gửi cho khách sau khi yêu cầu được duyệt — trỏ tới trang
- * đăng nhập magic link /login (app/login/page.tsx).
+ * /login (app/login/page.tsx), nơi khách tạo tài khoản bằng chính email này.
  *
  * Đọc từ LOGIN_URL; không có thì tự ghép từ NEXT_PUBLIC_SITE_URL + "/login".
  * Đổi tên miền thì chỉ cần đổi biến môi trường — KHÔNG phải sửa code, cũng
